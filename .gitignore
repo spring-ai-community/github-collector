@@ -1,0 +1,19 @@
+# Generated issue data files
+issues/
+logs/
+target/
+*.log
+**/batch_*
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

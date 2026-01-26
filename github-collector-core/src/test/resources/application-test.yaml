@@ -1,0 +1,23 @@
+# Test configuration for GitHub Issues Collection
+spring:
+  main:
+    web-application-type: none
+    
+github:
+  issues:
+    defaultRepository: spring-projects/spring-ai
+    batchSize: 10  # Smaller for testing
+    maxBatchSizeBytes: 1024  # 1KB for testing
+    maxRetries: 1  # Fewer retries for faster tests
+    
+# Disable web server for tests
+server:
+  port: -1
+
+# Logging configuration for tests
+logging:
+  level:
+    org.springaicommunity.github.ai.collection: DEBUG
+    root: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
