@@ -5,9 +5,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.kohsuke.github.GitHub;
-import org.kohsuke.github.GitHubBuilder;
-import org.springframework.web.client.RestClient;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -47,23 +44,12 @@ class SimpleIntegrationIT {
 		objectMapper = new ObjectMapper();
 		objectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
-		String token = System.getenv("GITHUB_TOKEN");
+		// Use GitHubCollectorBuilder to create services
+		GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().tokenFromEnv().objectMapper(objectMapper);
 
-		// Setup REST service
-		GitHub gitHub = new GitHubBuilder().withOAuthToken(token).build();
-		RestClient restClient = RestClient.builder()
-			.defaultHeader("Authorization", "token " + token)
-			.defaultHeader("Accept", "application/vnd.github.v3+json")
-			.build();
-		restService = new GitHubRestService(gitHub, restClient, objectMapper);
-
-		// Setup GraphQL service
-		RestClient graphQLClient = RestClient.builder()
-			.baseUrl("https://api.github.com/graphql")
-			.defaultHeader("Authorization", "Bearer " + token)
-			.defaultHeader("Content-Type", "application/json")
-			.build();
-		graphQLService = new GitHubGraphQLService(graphQLClient, objectMapper);
+		// Get individual services for testing
+		restService = builder.buildRestService();
+		graphQLService = builder.buildGraphQLService();
 
 		// Setup collection service with minimal properties
 		CollectionProperties properties = new CollectionProperties();
@@ -71,9 +57,11 @@ class SimpleIntegrationIT {
 		properties.setMaxRetries(1);
 		properties.setRetryDelay(500);
 
-		JsonNodeUtils jsonUtils = new JsonNodeUtils();
-		collectionService = new IssueCollectionService(graphQLService, restService, jsonUtils, objectMapper,
-				properties);
+		collectionService = GitHubCollectorBuilder.create()
+			.tokenFromEnv()
+			.objectMapper(objectMapper)
+			.properties(properties)
+			.buildIssueCollector();
 	}
 
 	@Test

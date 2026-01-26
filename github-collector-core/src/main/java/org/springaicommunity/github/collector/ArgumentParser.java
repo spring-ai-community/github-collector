@@ -1,7 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -10,7 +8,7 @@ import java.util.List;
  * Command-line argument parser for GitHub Issues Collection application. Pure Java
  * implementation with no Spring dependencies for maximum testability.
  */
-@Component
+
 public class ArgumentParser {
 
 	private final CollectionProperties defaultProperties;

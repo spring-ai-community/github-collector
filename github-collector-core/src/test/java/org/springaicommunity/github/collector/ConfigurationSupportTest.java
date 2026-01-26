@@ -1,29 +1,22 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * Tests for ConfigurationSupport classes. Uses plain JUnit for CollectionProperties and
- * minimal Spring context for configuration beans.
+ * Tests for configuration support classes. Uses plain JUnit for all tests.
  */
 @DisplayName("ConfigurationSupport Tests")
 class ConfigurationSupportTest {
 
 	@Nested
-	@DisplayName("CollectionProperties Tests - Plain JUnit")
+	@DisplayName("CollectionProperties Tests")
 	class CollectionPropertiesPlainTest {
 
 		private CollectionProperties collectionProperties;
@@ -108,43 +101,99 @@ class ConfigurationSupportTest {
 	}
 
 	@Nested
-	@SpringJUnitConfig
-	@Import({ GitHubConfigTest.TestConfig.class })
-	@TestPropertySource(properties = { "GITHUB_TOKEN=test-token-for-configuration-only" })
-	@DisplayName("GitHubConfig Tests - Minimal Spring Context")
-	static class GitHubConfigTest {
-
-		@TestConfiguration
-		@EnableConfigurationProperties(CollectionProperties.class)
-		static class TestConfig {
-
-			@Bean
-			public GitHubConfig gitHubConfig() {
-				return new GitHubConfig();
-			}
-
-		}
-
-		@Autowired
-		private ObjectMapper objectMapper;
+	@DisplayName("GitHubCollectorBuilder Tests")
+	class GitHubCollectorBuilderTest {
 
 		@Test
-		@DisplayName("Should create ObjectMapper bean with JavaTimeModule")
-		void shouldCreateObjectMapperBean() {
-			assertThat(objectMapper).isNotNull();
-
-			// Verify JavaTimeModule is registered (module ID format may vary)
-			assertThat(objectMapper.getRegisteredModuleIds())
-				.anyMatch(id -> id.toString().contains("jsr310") || id.toString().contains("JavaTimeModule"));
+		@DisplayName("Should create builder instance")
+		void shouldCreateBuilderInstance() {
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create();
+			assertThat(builder).isNotNull();
 		}
 
 		@Test
-		@DisplayName("Should not create GitHub-dependent beans in test environment")
-		void shouldNotCreateGitHubDependentBeansInTest() {
-			// This test verifies that we're NOT creating actual GitHub connections
-			// In a real environment with GITHUB_TOKEN, those beans would be created
-			// But in our test setup, we avoid creating real connections
-			assertThat(true).isTrue(); // Test that we can run without GitHub API calls
+		@DisplayName("Should accept custom properties")
+		void shouldAcceptCustomProperties() {
+			CollectionProperties props = new CollectionProperties();
+			props.setBatchSize(50);
+
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().properties(props);
+
+			assertThat(builder).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should accept custom ObjectMapper")
+		void shouldAcceptCustomObjectMapper() {
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.registerModule(new JavaTimeModule());
+
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().objectMapper(mapper);
+
+			assertThat(builder).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should throw when token not set")
+		void shouldThrowWhenTokenNotSet() {
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create();
+
+			assertThatThrownBy(builder::buildIssueCollector).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("token is required");
+		}
+
+		@Test
+		@DisplayName("Should throw when PR collector built without token")
+		void shouldThrowWhenPRCollectorBuiltWithoutToken() {
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create();
+
+			assertThatThrownBy(builder::buildPRCollector).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("token is required");
+		}
+
+		@Test
+		@DisplayName("Should accept token directly")
+		void shouldAcceptTokenDirectly() {
+			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().token("test-token");
+
+			// Should not throw - token is set
+			assertThat(builder).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should build issue collector with token")
+		void shouldBuildIssueCollectorWithToken() {
+			IssueCollectionService collector = GitHubCollectorBuilder.create()
+				.token("test-token")
+				.buildIssueCollector();
+
+			assertThat(collector).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should build PR collector with token")
+		void shouldBuildPRCollectorWithToken() {
+			PRCollectionService collector = GitHubCollectorBuilder.create().token("test-token").buildPRCollector();
+
+			assertThat(collector).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should build REST service with token")
+		void shouldBuildRestServiceWithToken() {
+			GitHubRestService restService = GitHubCollectorBuilder.create().token("test-token").buildRestService();
+
+			assertThat(restService).isNotNull();
+		}
+
+		@Test
+		@DisplayName("Should build GraphQL service with token")
+		void shouldBuildGraphQLServiceWithToken() {
+			GitHubGraphQLService graphQLService = GitHubCollectorBuilder.create()
+				.token("test-token")
+				.buildGraphQLService();
+
+			assertThat(graphQLService).isNotNull();
 		}
 
 	}

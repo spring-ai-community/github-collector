@@ -1,16 +1,12 @@
 package org.springaicommunity.github.collector;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Configuration properties for GitHub Issues Collection application.
+ * Configuration properties for GitHub collection. Use setters to configure or pass to
+ * GitHubCollectorBuilder.
  */
-@Component
-@ConfigurationProperties(prefix = "github.issues")
 public class CollectionProperties {
 
 	// Repository settings

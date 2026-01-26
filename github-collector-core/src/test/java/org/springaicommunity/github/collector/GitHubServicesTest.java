@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -13,8 +14,7 @@ import org.kohsuke.github.GHRateLimit;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.web.client.RestClient;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -31,34 +31,25 @@ import static org.mockito.Mockito.*;
  * mocked.
  */
 @DisplayName("GitHubServices Tests - Plain JUnit with Mocked APIs")
+@ExtendWith(MockitoExtension.class)
 class GitHubServicesTest {
 
 	@Mock
 	private GitHub mockGitHub;
 
 	@Mock
-	private RestClient mockRestClient;
+	private GitHubHttpClient mockHttpClient;
 
 	@Mock
-	private RestClient mockGraphQLClient;
+	private GitHubHttpClient mockGraphQLHttpClient;
 
 	@Mock
 	private ObjectMapper mockObjectMapper;
-
-	@Mock
-	private RestClient.RequestHeadersUriSpec mockRequestHeadersUriSpec;
-
-	@Mock
-	private RestClient.RequestBodyUriSpec mockRequestBodyUriSpec;
-
-	@Mock
-	private RestClient.ResponseSpec mockResponseSpec;
 
 	private ObjectMapper realObjectMapper;
 
 	@BeforeEach
 	void setUp() {
-		MockitoAnnotations.openMocks(this);
 		realObjectMapper = new ObjectMapper();
 		realObjectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 	}
@@ -71,7 +62,7 @@ class GitHubServicesTest {
 
 		@BeforeEach
 		void setUp() {
-			gitHubRestService = new GitHubRestService(mockGitHub, mockRestClient, realObjectMapper);
+			gitHubRestService = new GitHubRestService(mockGitHub, mockHttpClient, realObjectMapper);
 		}
 
 		@Test
@@ -103,11 +94,7 @@ class GitHubServicesTest {
 		void shouldGetRepositoryInfoViaRestAPI() {
 			String mockResponse = "{\"name\":\"spring-ai\",\"full_name\":\"spring-projects/spring-ai\"}";
 
-			when(mockRestClient.get()).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.uri(anyString(), anyString(), anyString()))
-				.thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockHttpClient.get(anyString())).thenReturn(mockResponse);
 
 			JsonNode result = gitHubRestService.getRepositoryInfo("spring-projects", "spring-ai");
 
@@ -121,11 +108,7 @@ class GitHubServicesTest {
 		void shouldHandleRepositoryInfoParsingErrorsGracefully() {
 			String invalidResponse = "invalid json";
 
-			when(mockRestClient.get()).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.uri(anyString(), anyString(), anyString()))
-				.thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(invalidResponse);
+			when(mockHttpClient.get(anyString())).thenReturn(invalidResponse);
 
 			JsonNode result = gitHubRestService.getRepositoryInfo("spring-projects", "spring-ai");
 
@@ -139,10 +122,7 @@ class GitHubServicesTest {
 		void shouldGetTotalIssueCountViaSearchAPI() {
 			String mockResponse = "{\"total_count\":1500,\"incomplete_results\":false}";
 
-			when(mockRestClient.get()).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockHttpClient.get(anyString())).thenReturn(mockResponse);
 
 			int result = gitHubRestService.getTotalIssueCount("spring-projects", "spring-ai", "closed");
 
@@ -152,10 +132,7 @@ class GitHubServicesTest {
 		@Test
 		@DisplayName("Should handle issue count API errors gracefully")
 		void shouldHandleIssueCountAPIErrorsGracefully() {
-			when(mockRestClient.get()).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.uri(anyString(), anyString())).thenReturn(mockRequestHeadersUriSpec);
-			when(mockRequestHeadersUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenThrow(new RuntimeException("API Error"));
+			when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API Error"));
 
 			int result = gitHubRestService.getTotalIssueCount("spring-projects", "spring-ai", "closed");
 
@@ -260,7 +237,7 @@ class GitHubServicesTest {
 
 		@BeforeEach
 		void setUp() {
-			gitHubGraphQLService = new GitHubGraphQLService(mockGraphQLClient, realObjectMapper);
+			gitHubGraphQLService = new GitHubGraphQLService(mockGraphQLHttpClient, realObjectMapper);
 		}
 
 		@Test
@@ -270,10 +247,7 @@ class GitHubServicesTest {
 			String testQuery = "query { repository(owner: \"spring-projects\", name: \"spring-ai\") { name } }";
 			Object testVariables = null;
 
-			when(mockGraphQLClient.post()).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.body(anyString())).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(mockResponse);
 
 			JsonNode result = gitHubGraphQLService.executeQuery(testQuery, testVariables);
 
@@ -286,10 +260,7 @@ class GitHubServicesTest {
 		void shouldHandleGraphQLQueryErrorsGracefully() {
 			String testQuery = "invalid query";
 
-			when(mockGraphQLClient.post()).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.body(anyString())).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenThrow(new RuntimeException("GraphQL Error"));
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenThrow(new RuntimeException("GraphQL Error"));
 
 			JsonNode result = gitHubGraphQLService.executeQuery(testQuery, null);
 
@@ -303,10 +274,7 @@ class GitHubServicesTest {
 		void shouldGetTotalIssueCountViaGraphQL() {
 			String mockResponse = "{\"data\":{\"repository\":{\"issues\":{\"totalCount\":2500}}}}";
 
-			when(mockGraphQLClient.post()).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.body(anyString())).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(mockResponse);
 
 			int result = gitHubGraphQLService.getTotalIssueCount("spring-projects", "spring-ai", "closed");
 
@@ -318,10 +286,7 @@ class GitHubServicesTest {
 		void shouldGetSearchIssueCountViaGraphQL() {
 			String mockResponse = "{\"data\":{\"search\":{\"issueCount\":750}}}";
 
-			when(mockGraphQLClient.post()).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.body(anyString())).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(mockResponse);
 
 			int result = gitHubGraphQLService
 				.getSearchIssueCount("repo:spring-projects/spring-ai is:issue is:closed label:\"bug\"");
@@ -338,10 +303,7 @@ class GitHubServicesTest {
 			String mockResponse = String.format("{\"data\":{\"repository\":{\"issues\":{\"totalCount\":%d}}}}",
 					expectedCount);
 
-			when(mockGraphQLClient.post()).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.body(anyString())).thenReturn(mockRequestBodyUriSpec);
-			when(mockRequestBodyUriSpec.retrieve()).thenReturn(mockResponseSpec);
-			when(mockResponseSpec.body(String.class)).thenReturn(mockResponse);
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(mockResponse);
 
 			int result = gitHubGraphQLService.getTotalIssueCount(owner, repo, state);
 
@@ -501,8 +463,8 @@ class GitHubServicesTest {
 			// This test verifies that all services can be instantiated and tested
 			// without requiring Spring Boot context
 
-			GitHubRestService restService = new GitHubRestService(mockGitHub, mockRestClient, realObjectMapper);
-			GitHubGraphQLService graphQLService = new GitHubGraphQLService(mockGraphQLClient, realObjectMapper);
+			GitHubRestService restService = new GitHubRestService(mockGitHub, mockHttpClient, realObjectMapper);
+			GitHubGraphQLService graphQLService = new GitHubGraphQLService(mockGraphQLHttpClient, realObjectMapper);
 			JsonNodeUtils jsonUtils = new JsonNodeUtils();
 
 			assertThat(restService).isNotNull();
@@ -510,17 +472,12 @@ class GitHubServicesTest {
 			assertThat(jsonUtils).isNotNull();
 
 			// Verify that creating these services doesn't trigger any external calls
-			verifyNoInteractions(mockGitHub, mockRestClient, mockGraphQLClient);
+			verifyNoInteractions(mockGitHub, mockHttpClient, mockGraphQLHttpClient);
 		}
 
 		@Test
 		@DisplayName("All services should handle errors gracefully without throwing exceptions")
 		void allServicesShouldHandleErrorsGracefullyWithoutThrowingExceptions() {
-			// This test is flawed - it tries to test error handling but the mock setup
-			// is complex due to Spring RestClient's fluent interface.
-			// For now, just test that JsonNodeUtils handles errors gracefully
-			// which is the main point of this test.
-
 			JsonNodeUtils jsonUtils = new JsonNodeUtils();
 
 			// Test that JsonNodeUtils handles missing fields gracefully
@@ -530,9 +487,6 @@ class GitHubServicesTest {
 				jsonUtils.getDateTime(realObjectMapper.createObjectNode(), "nonexistent");
 				jsonUtils.getArray(realObjectMapper.createObjectNode(), "nonexistent");
 			}).doesNotThrowAnyException();
-
-			// Note: RestService and GraphQLService error handling should be tested
-			// with proper integration tests that use real endpoints or better mocking
 		}
 
 	}

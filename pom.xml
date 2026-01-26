@@ -16,7 +16,7 @@
     <packaging>pom</packaging>
 
     <name>GitHub Collector Parent</name>
-    <description>GitHub Collector - Issues, PRs, and metadata collection library</description>
+    <description>GitHub Collector - Issues, PRs, and metadata collection library (Spring-free)</description>
     <url>https://github.com/spring-ai-community/github-collector</url>
 
     <licenses>
@@ -62,11 +62,13 @@
     </profiles>
 
     <properties>
+        <!-- Java version - use 17 for broad compatibility -->
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+
         <!-- GitHub Collector project version -->
         <github-collector.version>1.0.0-SNAPSHOT</github-collector.version>
-
-        <!-- Spring Boot Version -->
-        <spring-boot.version>3.2.0</spring-boot.version>
 
         <!-- GitHub API -->
         <github-api.version>1.317</github-api.version>
@@ -76,24 +78,16 @@
 
         <!-- Logging -->
         <slf4j.version>2.0.9</slf4j.version>
+        <logback.version>1.4.14</logback.version>
 
         <!-- Test dependency versions -->
         <junit-jupiter.version>5.10.1</junit-jupiter.version>
-        <mockito.version>5.7.0</mockito.version>
+        <mockito.version>5.11.0</mockito.version>
         <assertj.version>3.24.2</assertj.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Spring Boot BOM -->
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
             <!-- GitHub API -->
             <dependency>
                 <groupId>org.kohsuke</groupId>
@@ -120,6 +114,13 @@
                 <version>${slf4j.version}</version>
             </dependency>
 
+            <!-- Logback (for CLI) -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+
             <!-- Project modules -->
             <dependency>
                 <groupId>org.springaicommunity</groupId>
@@ -137,6 +138,12 @@
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
                 <version>${mockito.version}</version>
                 <scope>test</scope>
             </dependency>
@@ -175,11 +182,6 @@
                             </goals>
                         </execution>
                     </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-maven-plugin</artifactId>
-                    <version>${spring-boot.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

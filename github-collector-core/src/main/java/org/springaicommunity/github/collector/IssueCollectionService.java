@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 
 import java.io.FileOutputStream;
 import java.nio.file.Files;
@@ -20,11 +19,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Collection service for GitHub issues. Pure Java service with minimal Spring
- * dependencies for better testability. Contains issue-specific collection logic extending
- * BaseCollectionService.
+ * Collection service for GitHub issues. Pure Java service for better testability.
+ * Contains issue-specific collection logic extending BaseCollectionService.
  */
-@Service
 public class IssueCollectionService extends BaseCollectionService {
 
 	private static final Logger logger = LoggerFactory.getLogger(IssueCollectionService.class);

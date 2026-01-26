@@ -7,29 +7,28 @@ import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GitHub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
  * Service for GitHub REST API operations.
  */
-@Service
 public class GitHubRestService {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubRestService.class);
 
 	private final GitHub gitHub;
 
-	private final RestClient restClient;
+	private final GitHubHttpClient httpClient;
 
 	private final ObjectMapper objectMapper;
 
-	public GitHubRestService(GitHub gitHub, RestClient restClient, ObjectMapper objectMapper) {
+	public GitHubRestService(GitHub gitHub, GitHubHttpClient httpClient, ObjectMapper objectMapper) {
 		this.gitHub = gitHub;
-		this.restClient = restClient;
+		this.httpClient = httpClient;
 		this.objectMapper = objectMapper;
 	}
 
@@ -42,12 +41,8 @@ public class GitHubRestService {
 	}
 
 	public JsonNode getRepositoryInfo(String owner, String repo) {
-		String response = restClient.get()
-			.uri("https://api.github.com/repos/{owner}/{repo}", owner, repo)
-			.retrieve()
-			.body(String.class);
-
 		try {
+			String response = httpClient.get("/repos/" + owner + "/" + repo);
 			return objectMapper.readTree(response);
 		}
 		catch (Exception e) {
@@ -59,10 +54,8 @@ public class GitHubRestService {
 	public int getTotalIssueCount(String owner, String repo, String state) {
 		try {
 			String query = String.format("repo:%s/%s is:issue is:%s", owner, repo, state);
-			String response = restClient.get()
-				.uri("https://api.github.com/search/issues?q={query}", query)
-				.retrieve()
-				.body(String.class);
+			String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+			String response = httpClient.get("/search/issues?q=" + encodedQuery);
 
 			JsonNode searchResult = objectMapper.readTree(response);
 			return searchResult.path("total_count").asInt(0);
@@ -139,11 +132,10 @@ public class GitHubRestService {
 	 */
 	public JsonNode searchIssues(String searchQuery, String sortBy, String sortOrder, int perPage, int page) {
 		try {
-			String uri = "https://api.github.com/search/issues?q={query}&sort={sort}&order={order}&per_page={perPage}&page={page}";
-			String response = restClient.get()
-				.uri(uri, searchQuery, sortBy, sortOrder, perPage, page)
-				.retrieve()
-				.body(String.class);
+			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
+			String url = String.format("/search/issues?q=%s&sort=%s&order=%s&per_page=%d&page=%d", encodedQuery, sortBy,
+					sortOrder, perPage, page);
+			String response = httpClient.get(url);
 
 			return objectMapper.readTree(response);
 		}
@@ -160,10 +152,8 @@ public class GitHubRestService {
 	 */
 	public int getTotalIssueCount(String searchQuery) {
 		try {
-			String response = restClient.get()
-				.uri("https://api.github.com/search/issues?q={query}", searchQuery)
-				.retrieve()
-				.body(String.class);
+			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
+			String response = httpClient.get("/search/issues?q=" + encodedQuery);
 
 			JsonNode searchResult = objectMapper.readTree(response);
 			return searchResult.path("total_count").asInt(0);
@@ -183,11 +173,7 @@ public class GitHubRestService {
 	 */
 	public JsonNode getPullRequest(String owner, String repo, int prNumber) {
 		try {
-			String response = restClient.get()
-				.uri("https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}", owner, repo, prNumber)
-				.retrieve()
-				.body(String.class);
-
+			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber);
 			return objectMapper.readTree(response);
 		}
 		catch (Exception e) {
@@ -205,11 +191,7 @@ public class GitHubRestService {
 	 */
 	public JsonNode getPullRequestReviews(String owner, String repo, int prNumber) {
 		try {
-			String response = restClient.get()
-				.uri("https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews", owner, repo, prNumber)
-				.retrieve()
-				.body(String.class);
-
+			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber + "/reviews");
 			return objectMapper.readTree(response);
 		}
 		catch (Exception e) {
@@ -225,10 +207,8 @@ public class GitHubRestService {
 	 */
 	public int getTotalPRCount(String searchQuery) {
 		try {
-			String response = restClient.get()
-				.uri("https://api.github.com/search/issues?q={query}", searchQuery)
-				.retrieve()
-				.body(String.class);
+			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
+			String response = httpClient.get("/search/issues?q=" + encodedQuery);
 
 			JsonNode searchResult = objectMapper.readTree(response);
 			return searchResult.path("total_count").asInt(0);
@@ -306,11 +286,9 @@ public class GitHubRestService {
 				}
 			}
 
-			String response = restClient.get()
-				.uri("https://api.github.com/search/issues?q={query}&per_page={per_page}&page={page}", searchQuery,
-						batchSize, page)
-				.retrieve()
-				.body(String.class);
+			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
+			String url = String.format("/search/issues?q=%s&per_page=%d&page=%d", encodedQuery, batchSize, page);
+			String response = httpClient.get(url);
 
 			return objectMapper.readTree(response);
 		}

@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.Map;
@@ -13,17 +11,16 @@ import java.util.Map;
 /**
  * Service for GitHub GraphQL API operations.
  */
-@Service
 public class GitHubGraphQLService {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubGraphQLService.class);
 
-	private final RestClient graphQLClient;
+	private final GitHubHttpClient httpClient;
 
 	private final ObjectMapper objectMapper;
 
-	public GitHubGraphQLService(RestClient graphQLClient, ObjectMapper objectMapper) {
-		this.graphQLClient = graphQLClient;
+	public GitHubGraphQLService(GitHubHttpClient httpClient, ObjectMapper objectMapper) {
+		this.httpClient = httpClient;
 		this.objectMapper = objectMapper;
 	}
 
@@ -32,7 +29,7 @@ public class GitHubGraphQLService {
 			String requestBody = objectMapper
 				.writeValueAsString(Map.of("query", query, "variables", variables != null ? variables : Map.of()));
 
-			String response = graphQLClient.post().body(requestBody).retrieve().body(String.class);
+			String response = httpClient.postGraphQL(requestBody);
 
 			return objectMapper.readTree(response);
 		}

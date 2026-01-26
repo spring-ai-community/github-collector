@@ -3,7 +3,6 @@ package org.springaicommunity.github.collector;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -13,7 +12,7 @@ import java.util.Optional;
 /**
  * Utility service for JsonNode navigation.
  */
-@Service
+
 public class JsonNodeUtils {
 
 	private static final Logger logger = LoggerFactory.getLogger(JsonNodeUtils.class);

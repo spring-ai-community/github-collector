@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -16,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Collection service for GitHub pull requests with soft approval detection. Extends
  * BaseCollectionService with PR-specific functionality.
  */
-@Service
+
 public class PRCollectionService extends BaseCollectionService {
 
 	private static final Logger logger = LoggerFactory.getLogger(PRCollectionService.class);
