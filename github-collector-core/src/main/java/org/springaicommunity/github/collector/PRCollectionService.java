@@ -20,9 +20,11 @@ public class PRCollectionService extends BaseCollectionService {
 
 	private static final Logger logger = LoggerFactory.getLogger(PRCollectionService.class);
 
-	public PRCollectionService(GitHubGraphQLService graphQLService, GitHubRestService restService,
-			JsonNodeUtils jsonUtils, ObjectMapper objectMapper, CollectionProperties properties) {
-		super(graphQLService, restService, jsonUtils, objectMapper, properties);
+	public PRCollectionService(GraphQLService graphQLService, RestService restService, JsonNodeUtils jsonUtils,
+			ObjectMapper objectMapper, CollectionProperties properties, CollectionStateRepository stateRepository,
+			ArchiveService archiveService, BatchStrategy batchStrategy) {
+		super(graphQLService, restService, jsonUtils, objectMapper, properties, stateRepository, archiveService,
+				batchStrategy);
 	}
 
 	@Override

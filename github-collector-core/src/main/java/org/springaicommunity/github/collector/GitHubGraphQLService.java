@@ -11,19 +11,20 @@ import java.util.Map;
 /**
  * Service for GitHub GraphQL API operations.
  */
-public class GitHubGraphQLService {
+public class GitHubGraphQLService implements GraphQLService {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubGraphQLService.class);
 
-	private final GitHubHttpClient httpClient;
+	private final GitHubClient httpClient;
 
 	private final ObjectMapper objectMapper;
 
-	public GitHubGraphQLService(GitHubHttpClient httpClient, ObjectMapper objectMapper) {
+	public GitHubGraphQLService(GitHubClient httpClient, ObjectMapper objectMapper) {
 		this.httpClient = httpClient;
 		this.objectMapper = objectMapper;
 	}
 
+	@Override
 	public JsonNode executeQuery(String query, Object variables) {
 		try {
 			String requestBody = objectMapper
@@ -39,6 +40,7 @@ public class GitHubGraphQLService {
 		}
 	}
 
+	@Override
 	public int getTotalIssueCount(String owner, String repo, String state) {
 		String query = """
 				query($owner: String!, $repo: String!, $states: [IssueState!]!) {
@@ -57,6 +59,7 @@ public class GitHubGraphQLService {
 	}
 
 	// Get issue count using GitHub Search API for filtered queries
+	@Override
 	public int getSearchIssueCount(String searchQuery) {
 		String query = """
 				query($query: String!) {
@@ -82,6 +85,7 @@ public class GitHubGraphQLService {
 	 * @param after Cursor for pagination (null for first page)
 	 * @return JsonNode containing search results with pagination info
 	 */
+	@Override
 	public JsonNode searchIssuesWithSorting(String searchQuery, String sortBy, String sortOrder, int first,
 			String after) {
 		// Convert REST API sort parameters to GraphQL format

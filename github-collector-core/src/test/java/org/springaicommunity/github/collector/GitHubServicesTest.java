@@ -43,9 +43,6 @@ class GitHubServicesTest {
 	@Mock
 	private GitHubHttpClient mockGraphQLHttpClient;
 
-	@Mock
-	private ObjectMapper mockObjectMapper;
-
 	private ObjectMapper realObjectMapper;
 
 	@BeforeEach
@@ -223,6 +220,221 @@ class GitHubServicesTest {
 					.contains("is:issue")
 					.contains("is:open")
 					.doesNotContain("label:");
+			}
+
+		}
+
+		@Nested
+		@DisplayName("Pull Request API Tests")
+		class PullRequestAPITest {
+
+			@Test
+			@DisplayName("Should get pull request by number")
+			void shouldGetPullRequestByNumber() {
+				String mockResponse = "{\"number\":123,\"title\":\"Fix bug\",\"state\":\"open\"}";
+				when(mockHttpClient.get("/repos/owner/repo/pulls/123")).thenReturn(mockResponse);
+
+				JsonNode result = gitHubRestService.getPullRequest("owner", "repo", 123);
+
+				assertThat(result).isNotNull();
+				assertThat(result.path("number").asInt()).isEqualTo(123);
+				assertThat(result.path("title").asText()).isEqualTo("Fix bug");
+				assertThat(result.path("state").asText()).isEqualTo("open");
+			}
+
+			@Test
+			@DisplayName("Should handle get pull request error gracefully")
+			void shouldHandleGetPullRequestErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("PR not found"));
+
+				JsonNode result = gitHubRestService.getPullRequest("owner", "repo", 999);
+
+				assertThat(result).isNotNull();
+				assertThat(result.isObject()).isTrue();
+				assertThat(result.size()).isEqualTo(0);
+			}
+
+			@Test
+			@DisplayName("Should get pull request reviews")
+			void shouldGetPullRequestReviews() {
+				String mockResponse = "[{\"id\":1,\"state\":\"APPROVED\",\"user\":{\"login\":\"reviewer\"}}]";
+				when(mockHttpClient.get("/repos/owner/repo/pulls/123/reviews")).thenReturn(mockResponse);
+
+				JsonNode result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
+
+				assertThat(result).isNotNull();
+				assertThat(result.isArray()).isTrue();
+				assertThat(result.size()).isEqualTo(1);
+				assertThat(result.get(0).path("state").asText()).isEqualTo("APPROVED");
+			}
+
+			@Test
+			@DisplayName("Should handle get reviews error gracefully")
+			void shouldHandleGetReviewsErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
+
+				JsonNode result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
+
+				assertThat(result).isNotNull();
+				assertThat(result.isArray()).isTrue();
+				assertThat(result.size()).isEqualTo(0);
+			}
+
+			@Test
+			@DisplayName("Should get total PR count")
+			void shouldGetTotalPRCount() {
+				String mockResponse = "{\"total_count\":250,\"incomplete_results\":false}";
+				when(mockHttpClient.get(contains("/search/issues"))).thenReturn(mockResponse);
+
+				int result = gitHubRestService.getTotalPRCount("repo:owner/repo is:pr");
+
+				assertThat(result).isEqualTo(250);
+			}
+
+			@Test
+			@DisplayName("Should handle PR count error gracefully")
+			void shouldHandlePRCountErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
+
+				int result = gitHubRestService.getTotalPRCount("repo:owner/repo is:pr");
+
+				assertThat(result).isEqualTo(0);
+			}
+
+			@Test
+			@DisplayName("Should search PRs with pagination")
+			void shouldSearchPRsWithPagination() {
+				String mockResponse = "{\"total_count\":100,\"items\":[{\"number\":1},{\"number\":2}]}";
+				when(mockHttpClient.get(contains("/search/issues"))).thenReturn(mockResponse);
+
+				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
+
+				assertThat(result).isNotNull();
+				assertThat(result.path("total_count").asInt()).isEqualTo(100);
+				assertThat(result.path("items").size()).isEqualTo(2);
+			}
+
+			@Test
+			@DisplayName("Should search PRs with cursor/page number")
+			void shouldSearchPRsWithCursor() {
+				String mockResponse = "{\"total_count\":100,\"items\":[{\"number\":31}]}";
+				when(mockHttpClient.get(contains("page=2"))).thenReturn(mockResponse);
+
+				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "2");
+
+				assertThat(result).isNotNull();
+				verify(mockHttpClient).get(contains("page=2"));
+			}
+
+			@Test
+			@DisplayName("Should handle invalid cursor gracefully")
+			void shouldHandleInvalidCursorGracefully() {
+				String mockResponse = "{\"total_count\":10,\"items\":[]}";
+				when(mockHttpClient.get(anyString())).thenReturn(mockResponse);
+
+				// Invalid cursor should default to page 1
+				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "invalid");
+
+				assertThat(result).isNotNull();
+				verify(mockHttpClient).get(contains("page=1"));
+			}
+
+			@Test
+			@DisplayName("Should handle search PRs error gracefully")
+			void shouldHandleSearchPRsErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("Search failed"));
+
+				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
+
+				assertThat(result).isNotNull();
+				assertThat(result.isObject()).isTrue();
+				assertThat(result.size()).isEqualTo(0);
+			}
+
+		}
+
+		@Nested
+		@DisplayName("PR Search Query Building Tests")
+		class PRSearchQueryBuildingTest {
+
+			@Test
+			@DisplayName("Should build basic PR search query")
+			void shouldBuildBasicPRSearchQuery() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", null, "any");
+
+				assertThat(query).contains("repo:owner/repo")
+					.contains("is:pr")
+					.contains("is:open")
+					.doesNotContain("label:");
+			}
+
+			@Test
+			@DisplayName("Should build PR search query for closed state")
+			void shouldBuildPRSearchQueryForClosedState() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "any");
+
+				assertThat(query).contains("repo:owner/repo").contains("is:pr").contains("is:closed");
+			}
+
+			@Test
+			@DisplayName("Should build PR search query for merged state")
+			void shouldBuildPRSearchQueryForMergedState() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "merged", null, "any");
+
+				assertThat(query).contains("repo:owner/repo").contains("is:pr").contains("is:merged");
+			}
+
+			@Test
+			@DisplayName("Should build PR search query for all states")
+			void shouldBuildPRSearchQueryForAllStates() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "all", null, "any");
+
+				assertThat(query).contains("repo:owner/repo")
+					.contains("is:pr")
+					.doesNotContain("is:open")
+					.doesNotContain("is:closed")
+					.doesNotContain("is:merged")
+					.doesNotContain("is:all");
+			}
+
+			@Test
+			@DisplayName("Should build PR search query with labels in all mode")
+			void shouldBuildPRSearchQueryWithLabelsInAllMode() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open",
+						List.of("bug", "priority:high"), "all");
+
+				assertThat(query).contains("repo:owner/repo")
+					.contains("is:pr")
+					.contains("label:\"bug\"")
+					.contains("label:\"priority:high\"");
+			}
+
+			@Test
+			@DisplayName("Should build PR search query with labels in any mode - uses first label")
+			void shouldBuildPRSearchQueryWithLabelsInAnyMode() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", List.of("bug", "enhancement"),
+						"any");
+
+				assertThat(query).contains("repo:owner/repo")
+					.contains("is:pr")
+					.contains("label:\"bug\"")
+					.doesNotContain("label:\"enhancement\"");
+			}
+
+			@Test
+			@DisplayName("Should handle empty labels list")
+			void shouldHandleEmptyLabelsList() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", List.of(), "any");
+
+				assertThat(query).contains("repo:owner/repo").contains("is:pr").doesNotContain("label:");
+			}
+
+			@Test
+			@DisplayName("Should handle null labels")
+			void shouldHandleNullLabels() {
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "all");
+
+				assertThat(query).contains("repo:owner/repo").contains("is:pr").doesNotContain("label:");
 			}
 
 		}

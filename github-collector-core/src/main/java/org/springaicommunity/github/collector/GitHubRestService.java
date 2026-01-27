@@ -16,30 +16,33 @@ import java.util.List;
 /**
  * Service for GitHub REST API operations.
  */
-public class GitHubRestService {
+public class GitHubRestService implements RestService {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubRestService.class);
 
 	private final GitHub gitHub;
 
-	private final GitHubHttpClient httpClient;
+	private final GitHubClient httpClient;
 
 	private final ObjectMapper objectMapper;
 
-	public GitHubRestService(GitHub gitHub, GitHubHttpClient httpClient, ObjectMapper objectMapper) {
+	public GitHubRestService(GitHub gitHub, GitHubClient httpClient, ObjectMapper objectMapper) {
 		this.gitHub = gitHub;
 		this.httpClient = httpClient;
 		this.objectMapper = objectMapper;
 	}
 
+	@Override
 	public GHRateLimit getRateLimit() throws IOException {
 		return gitHub.getRateLimit();
 	}
 
+	@Override
 	public GHRepository getRepository(String repoName) throws IOException {
 		return gitHub.getRepository(repoName);
 	}
 
+	@Override
 	public JsonNode getRepositoryInfo(String owner, String repo) {
 		try {
 			String response = httpClient.get("/repos/" + owner + "/" + repo);
@@ -51,6 +54,7 @@ public class GitHubRestService {
 		}
 	}
 
+	@Override
 	public int getTotalIssueCount(String owner, String repo, String state) {
 		try {
 			String query = String.format("repo:%s/%s is:issue is:%s", owner, repo, state);
@@ -75,6 +79,7 @@ public class GitHubRestService {
 	 * @param labelMode Label matching mode (any/all)
 	 * @return Formatted search query string
 	 */
+	@Override
 	public String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode) {
 		return buildSearchQuery(owner, repo, state, labels, labelMode, null, null, null);
 	}
@@ -91,6 +96,7 @@ public class GitHubRestService {
 	 * @param maxIssues Maximum number of issues to collect (null for unlimited)
 	 * @return Formatted search query string
 	 */
+	@Override
 	public String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode,
 			String sortBy, String sortOrder, Integer maxIssues) {
 		StringBuilder query = new StringBuilder();
@@ -130,6 +136,7 @@ public class GitHubRestService {
 	 * @param page Page number (1-based)
 	 * @return JsonNode containing search results
 	 */
+	@Override
 	public JsonNode searchIssues(String searchQuery, String sortBy, String sortOrder, int perPage, int page) {
 		try {
 			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
@@ -150,6 +157,7 @@ public class GitHubRestService {
 	 * @param searchQuery The formatted search query string
 	 * @return Total number of issues matching the query
 	 */
+	@Override
 	public int getTotalIssueCount(String searchQuery) {
 		try {
 			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
@@ -171,6 +179,7 @@ public class GitHubRestService {
 	 * @param prNumber PR number
 	 * @return PR data as JsonNode
 	 */
+	@Override
 	public JsonNode getPullRequest(String owner, String repo, int prNumber) {
 		try {
 			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber);
@@ -189,6 +198,7 @@ public class GitHubRestService {
 	 * @param prNumber PR number
 	 * @return Reviews data as JsonNode
 	 */
+	@Override
 	public JsonNode getPullRequestReviews(String owner, String repo, int prNumber) {
 		try {
 			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber + "/reviews");
@@ -205,6 +215,7 @@ public class GitHubRestService {
 	 * @param searchQuery The formatted search query string
 	 * @return Total number of PRs matching the query
 	 */
+	@Override
 	public int getTotalPRCount(String searchQuery) {
 		try {
 			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
@@ -227,6 +238,7 @@ public class GitHubRestService {
 	 * @param labelMode Label matching mode (any, all)
 	 * @return Formatted search query
 	 */
+	@Override
 	public String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode) {
 		StringBuilder query = new StringBuilder();
 		query.append("repo:").append(repository);
@@ -273,6 +285,7 @@ public class GitHubRestService {
 	 * numbers)
 	 * @return JSON response containing PR search results
 	 */
+	@Override
 	public JsonNode searchPRs(String searchQuery, int batchSize, String cursor) {
 		try {
 			// For REST API, we'll use simple pagination instead of cursor

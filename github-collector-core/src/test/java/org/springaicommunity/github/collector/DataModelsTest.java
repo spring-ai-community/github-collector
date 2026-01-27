@@ -84,6 +84,91 @@ class DataModelsTest {
 		}
 
 		@Test
+		@DisplayName("Should create Review record with all fields")
+		void shouldCreateReview() {
+			// Given
+			Author reviewer = new Author("reviewer", "Code Reviewer");
+			long id = 12345L;
+			String body = "LGTM! Great implementation.";
+			String state = "APPROVED";
+			LocalDateTime submittedAt = LocalDateTime.of(2023, 1, 15, 14, 30);
+			String authorAssociation = "MEMBER";
+			String htmlUrl = "https://github.com/owner/repo/pull/1#pullrequestreview-12345";
+
+			// When
+			Review review = new Review(id, body, state, submittedAt, reviewer, authorAssociation, htmlUrl);
+
+			// Then
+			assertThat(review.id()).isEqualTo(id);
+			assertThat(review.body()).isEqualTo(body);
+			assertThat(review.state()).isEqualTo(state);
+			assertThat(review.submittedAt()).isEqualTo(submittedAt);
+			assertThat(review.author()).isEqualTo(reviewer);
+			assertThat(review.authorAssociation()).isEqualTo(authorAssociation);
+			assertThat(review.htmlUrl()).isEqualTo(htmlUrl);
+		}
+
+		@Test
+		@DisplayName("Should create PullRequest record with all fields")
+		void shouldCreatePullRequest() {
+			// Given
+			Author author = new Author("prauthor", "PR Author");
+			Author reviewer = new Author("reviewer", "Reviewer");
+			Label bugLabel = new Label("bug", "d73a49", "Bug fix");
+			Comment comment = new Comment(author, "Ready for review", LocalDateTime.now());
+			Review review = new Review(1L, "LGTM", "APPROVED", LocalDateTime.now(), reviewer, "MEMBER",
+					"https://github.com/owner/repo/pull/42#review");
+
+			int number = 42;
+			String title = "Fix critical bug";
+			String body = "This PR fixes issue #123";
+			String state = "closed";
+			LocalDateTime createdAt = LocalDateTime.of(2023, 1, 15, 10, 0);
+			LocalDateTime updatedAt = LocalDateTime.of(2023, 1, 16, 14, 0);
+			LocalDateTime closedAt = LocalDateTime.of(2023, 1, 16, 14, 0);
+			LocalDateTime mergedAt = LocalDateTime.of(2023, 1, 16, 14, 0);
+			String url = "https://api.github.com/repos/owner/repo/pulls/42";
+			String htmlUrl = "https://github.com/owner/repo/pull/42";
+			boolean draft = false;
+			boolean merged = true;
+			String mergeCommitSha = "abc123def456";
+			String headRef = "feature/fix-bug";
+			String baseRef = "main";
+			int additions = 50;
+			int deletions = 10;
+			int changedFiles = 3;
+
+			// When
+			PullRequest pr = new PullRequest(number, title, body, state, createdAt, updatedAt, closedAt, mergedAt, url,
+					htmlUrl, author, List.of(comment), List.of(bugLabel), List.of(review), draft, merged,
+					mergeCommitSha, headRef, baseRef, additions, deletions, changedFiles);
+
+			// Then
+			assertThat(pr.number()).isEqualTo(number);
+			assertThat(pr.title()).isEqualTo(title);
+			assertThat(pr.body()).isEqualTo(body);
+			assertThat(pr.state()).isEqualTo(state);
+			assertThat(pr.createdAt()).isEqualTo(createdAt);
+			assertThat(pr.updatedAt()).isEqualTo(updatedAt);
+			assertThat(pr.closedAt()).isEqualTo(closedAt);
+			assertThat(pr.mergedAt()).isEqualTo(mergedAt);
+			assertThat(pr.url()).isEqualTo(url);
+			assertThat(pr.htmlUrl()).isEqualTo(htmlUrl);
+			assertThat(pr.author()).isEqualTo(author);
+			assertThat(pr.comments()).containsExactly(comment);
+			assertThat(pr.labels()).containsExactly(bugLabel);
+			assertThat(pr.reviews()).containsExactly(review);
+			assertThat(pr.draft()).isFalse();
+			assertThat(pr.merged()).isTrue();
+			assertThat(pr.mergeCommitSha()).isEqualTo(mergeCommitSha);
+			assertThat(pr.headRef()).isEqualTo(headRef);
+			assertThat(pr.baseRef()).isEqualTo(baseRef);
+			assertThat(pr.additions()).isEqualTo(additions);
+			assertThat(pr.deletions()).isEqualTo(deletions);
+			assertThat(pr.changedFiles()).isEqualTo(changedFiles);
+		}
+
+		@Test
 		@DisplayName("Should create Issue record with all fields")
 		void shouldCreateIssue() {
 			// Given
@@ -318,6 +403,69 @@ class DataModelsTest {
 			assertThat(json).contains("closed");
 			assertThat(json).contains("bug");
 			assertThat(json).contains("enhancement");
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize Review record")
+		void shouldSerializeDeserializeReview() throws JsonProcessingException {
+			// Given
+			Author reviewer = new Author("reviewer", "Code Reviewer");
+			Review original = new Review(12345L, "LGTM!", "APPROVED", LocalDateTime.of(2023, 1, 15, 14, 30), reviewer,
+					"MEMBER", "https://github.com/owner/repo/pull/1#review");
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			Review deserialized = objectMapper.readValue(json, Review.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("APPROVED");
+			assertThat(json).contains("MEMBER");
+			assertThat(json).contains("reviewer");
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize PullRequest record")
+		void shouldSerializeDeserializePullRequest() throws JsonProcessingException {
+			// Given
+			Author author = new Author("prauthor", "PR Author");
+			PullRequest original = new PullRequest(42, "Fix bug", "Description", "merged",
+					LocalDateTime.of(2023, 1, 15, 10, 0), LocalDateTime.of(2023, 1, 16, 14, 0),
+					LocalDateTime.of(2023, 1, 16, 14, 0), LocalDateTime.of(2023, 1, 16, 14, 0),
+					"https://api.github.com/repos/owner/repo/pulls/42", "https://github.com/owner/repo/pull/42", author,
+					List.of(), List.of(), List.of(), false, true, "abc123", "feature", "main", 100, 50, 5);
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			PullRequest deserialized = objectMapper.readValue(json, PullRequest.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("Fix bug");
+			assertThat(json).contains("merged");
+			assertThat(json).contains("abc123");
+		}
+
+		@Test
+		@DisplayName("Should handle null values in PullRequest record")
+		void shouldHandleNullValuesInPullRequest() throws JsonProcessingException {
+			// Given - PR that is open (not merged, no closedAt/mergedAt)
+			Author author = new Author("prauthor", null);
+			PullRequest original = new PullRequest(99, "WIP: New feature", null, "open", LocalDateTime.now(),
+					LocalDateTime.now(), null, null, "url", "htmlUrl", author, List.of(), List.of(), List.of(), true,
+					false, null, "wip-branch", "main", 0, 0, 0);
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			PullRequest deserialized = objectMapper.readValue(json, PullRequest.class);
+
+			// Then
+			assertThat(deserialized.body()).isNull();
+			assertThat(deserialized.closedAt()).isNull();
+			assertThat(deserialized.mergedAt()).isNull();
+			assertThat(deserialized.mergeCommitSha()).isNull();
+			assertThat(deserialized.draft()).isTrue();
+			assertThat(deserialized.merged()).isFalse();
 		}
 
 		@Test

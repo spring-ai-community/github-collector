@@ -14,7 +14,7 @@ import java.time.Duration;
  * Simple HTTP client wrapper for GitHub API calls using Java 11+ HttpClient. Replaces
  * Spring's RestClient to keep the library Spring-free.
  */
-public class GitHubHttpClient {
+public class GitHubHttpClient implements GitHubClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubHttpClient.class);
 
@@ -34,14 +34,12 @@ public class GitHubHttpClient {
 			.build();
 	}
 
-	/**
-	 * Execute a GET request to the GitHub REST API.
-	 * @param path API path (e.g., "/repos/owner/repo")
-	 * @return Response body as String
-	 * @throws GitHubApiException if the request fails
-	 */
+	@Override
 	public String get(String path) {
 		String url = path.startsWith("http") ? path : GITHUB_API_BASE + path;
+		logger.debug("GET {}", url);
+		long start = System.currentTimeMillis();
+
 		HttpRequest request = HttpRequest.newBuilder()
 			.uri(URI.create(url))
 			.header("Authorization", "token " + token)
@@ -50,16 +48,19 @@ public class GitHubHttpClient {
 			.GET()
 			.build();
 
-		return executeRequest(request);
+		try {
+			String response = executeRequest(request);
+			logger.debug("GET {} completed in {}ms ({} bytes)", url, System.currentTimeMillis() - start,
+					response.length());
+			return response;
+		}
+		catch (Exception e) {
+			logger.debug("GET {} failed after {}ms: {}", url, System.currentTimeMillis() - start, e.getMessage());
+			throw e;
+		}
 	}
 
-	/**
-	 * Execute a GET request with query parameters.
-	 * @param path API path
-	 * @param queryString Query string (without leading ?)
-	 * @return Response body as String
-	 * @throws GitHubApiException if the request fails
-	 */
+	@Override
 	public String getWithQuery(String path, String queryString) {
 		String url = GITHUB_API_BASE + path;
 		if (queryString != null && !queryString.isEmpty()) {
@@ -68,13 +69,11 @@ public class GitHubHttpClient {
 		return get(url);
 	}
 
-	/**
-	 * Execute a POST request to the GitHub GraphQL API.
-	 * @param body Request body (JSON)
-	 * @return Response body as String
-	 * @throws GitHubApiException if the request fails
-	 */
+	@Override
 	public String postGraphQL(String body) {
+		logger.debug("POST GraphQL ({} bytes)", body.length());
+		long start = System.currentTimeMillis();
+
 		HttpRequest request = HttpRequest.newBuilder()
 			.uri(URI.create(GITHUB_GRAPHQL_ENDPOINT))
 			.header("Authorization", "Bearer " + token)
@@ -83,7 +82,16 @@ public class GitHubHttpClient {
 			.POST(HttpRequest.BodyPublishers.ofString(body))
 			.build();
 
-		return executeRequest(request);
+		try {
+			String response = executeRequest(request);
+			logger.debug("POST GraphQL completed in {}ms ({} bytes)", System.currentTimeMillis() - start,
+					response.length());
+			return response;
+		}
+		catch (Exception e) {
+			logger.debug("POST GraphQL failed after {}ms: {}", System.currentTimeMillis() - start, e.getMessage());
+			throw e;
+		}
 	}
 
 	private String executeRequest(HttpRequest request) {

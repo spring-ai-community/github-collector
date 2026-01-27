@@ -5,30 +5,30 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileOutputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 /**
- * Base class for collection services providing common functionality for issues and PRs.
- * Contains shared file operations, batching logic, and ZIP generation.
+ * Base class for collection services providing common orchestration for issues and PRs.
+ *
+ * <p>
+ * Delegates to extracted services for specific responsibilities:
+ * <ul>
+ * <li>{@link CollectionStateRepository} - file I/O operations</li>
+ * <li>{@link ArchiveService} - ZIP archive creation</li>
+ * <li>{@link BatchStrategy} - batch creation logic</li>
+ * </ul>
  */
 public abstract class BaseCollectionService {
 
 	private static final Logger logger = LoggerFactory.getLogger(BaseCollectionService.class);
 
-	protected final GitHubGraphQLService graphQLService;
+	protected final GraphQLService graphQLService;
 
-	protected final GitHubRestService restService;
+	protected final RestService restService;
 
 	protected final JsonNodeUtils jsonUtils;
 
@@ -36,7 +36,13 @@ public abstract class BaseCollectionService {
 
 	protected final CollectionProperties properties;
 
-	// Configuration constants (will be initialized from properties)
+	protected final CollectionStateRepository stateRepository;
+
+	protected final ArchiveService archiveService;
+
+	protected final BatchStrategy batchStrategy;
+
+	// Configuration constants exposed for subclasses
 	protected final int MAX_BATCH_SIZE_BYTES;
 
 	protected final int LARGE_ISSUE_THRESHOLD;
@@ -45,13 +51,17 @@ public abstract class BaseCollectionService {
 
 	protected final String RESUME_FILE;
 
-	public BaseCollectionService(GitHubGraphQLService graphQLService, GitHubRestService restService,
-			JsonNodeUtils jsonUtils, ObjectMapper objectMapper, CollectionProperties properties) {
+	public BaseCollectionService(GraphQLService graphQLService, RestService restService, JsonNodeUtils jsonUtils,
+			ObjectMapper objectMapper, CollectionProperties properties, CollectionStateRepository stateRepository,
+			ArchiveService archiveService, BatchStrategy batchStrategy) {
 		this.graphQLService = graphQLService;
 		this.restService = restService;
 		this.jsonUtils = jsonUtils;
 		this.objectMapper = objectMapper;
 		this.properties = properties;
+		this.stateRepository = stateRepository;
+		this.archiveService = archiveService;
+		this.batchStrategy = batchStrategy;
 
 		// Initialize configuration constants from properties
 		this.MAX_BATCH_SIZE_BYTES = properties.getMaxBatchSizeBytes();
@@ -176,10 +186,10 @@ public abstract class BaseCollectionService {
 						pendingItems.size(), isDashboardMode ? effectiveTotal : "unlimited");
 			}
 
-			// Create adaptive batch, respecting dashboard limits
+			// Create batch, respecting dashboard limits
 			int maxBatchSize = isDashboardMode ? Math.min(targetBatchSize, effectiveTotal - processedCount.get())
 					: targetBatchSize;
-			List<JsonNode> currentBatch = createAdaptiveBatch(pendingItems, maxBatchSize);
+			List<JsonNode> currentBatch = batchStrategy.createBatch(pendingItems, maxBatchSize);
 
 			if (currentBatch.isEmpty()) {
 				break; // No more items to process
@@ -216,23 +226,6 @@ public abstract class BaseCollectionService {
 	 * different pagination mechanisms.
 	 */
 	protected abstract boolean determineHasMore(List<JsonNode> batch, int requestedSize, Optional<String> nextCursor);
-
-	/**
-	 * Create adaptive batch from pending items
-	 */
-	private List<JsonNode> createAdaptiveBatch(List<JsonNode> pendingItems, int maxBatchSize) {
-		if (pendingItems.isEmpty()) {
-			return new ArrayList<>();
-		}
-
-		int batchSize = Math.min(maxBatchSize, pendingItems.size());
-		List<JsonNode> batch = new ArrayList<>(pendingItems.subList(0, batchSize));
-
-		// Remove processed items from pending list
-		pendingItems.subList(0, batchSize).clear();
-
-		return batch;
-	}
 
 	/**
 	 * Common validation logic for collection requests
@@ -275,23 +268,8 @@ public abstract class BaseCollectionService {
 	 * Create output directory structure
 	 */
 	protected Path createOutputDirectory(CollectionRequest request) {
-		String[] repoParts = request.repository().split("/");
-		String owner = repoParts[0];
-		String repo = repoParts[1];
-
-		// Use the appropriate state field based on collection type
 		String state = getCollectionType().equals("prs") ? request.prState() : request.issueState();
-		String baseDir = getCollectionType() + "/raw/" + state;
-		Path outputDir = Paths.get(baseDir, owner, repo);
-
-		try {
-			Files.createDirectories(outputDir);
-			logger.info("Created output directory: {}", outputDir);
-			return outputDir;
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Failed to create output directory: " + outputDir, e);
-		}
+		return stateRepository.createOutputDirectory(getCollectionType(), request.repository(), state);
 	}
 
 	/**
@@ -301,55 +279,18 @@ public abstract class BaseCollectionService {
 		if (!clean) {
 			return;
 		}
-
-		try {
-			if (Files.exists(outputDir)) {
-				Files.walk(outputDir).sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
-					try {
-						Files.delete(path);
-					}
-					catch (Exception e) {
-						logger.warn("Failed to delete: {}", path);
-					}
-				});
-
-				// Recreate the directory after cleaning
-				Files.createDirectories(outputDir);
-				logger.info("Cleaned output directory: {}", outputDir);
-			}
-		}
-		catch (Exception e) {
-			logger.warn("Failed to clean output directory: {}", e.getMessage());
-		}
+		stateRepository.cleanOutputDirectory(outputDir);
 	}
 
 	/**
 	 * Save batch data to file
 	 */
 	protected String saveBatchToFile(Path outputDir, int batchIndex, List<JsonNode> items, CollectionRequest request) {
-		if (request.dryRun()) {
-			String filename = String.format("batch_%03d_%s.json", batchIndex, getCollectionType());
-			logger.info("DRY RUN: Would save {} items to {}", items.size(), filename);
-			return filename;
-		}
+		Map<String, Object> batchData = new HashMap<>();
+		batchData.put("metadata", createBatchMetadata(batchIndex, items.size(), request));
+		batchData.put(getCollectionType(), items);
 
-		try {
-			String filename = String.format("batch_%03d_%s.json", batchIndex, getCollectionType());
-			Path filePath = outputDir.resolve(filename);
-
-			Map<String, Object> batchData = new HashMap<>();
-			batchData.put("metadata", createBatchMetadata(batchIndex, items.size(), request));
-			batchData.put(getCollectionType(), items);
-
-			objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(), batchData);
-
-			logger.info("Saved batch {} with {} {} to {}", batchIndex, items.size(), getCollectionType(), filename);
-			return filename;
-
-		}
-		catch (Exception e) {
-			throw new RuntimeException("Failed to save batch " + batchIndex, e);
-		}
+		return stateRepository.saveBatch(outputDir, batchIndex, batchData, getCollectionType(), request.dryRun());
 	}
 
 	/**
@@ -378,74 +319,14 @@ public abstract class BaseCollectionService {
 	 * Create ZIP file from batch files
 	 */
 	protected void createZipFile(Path outputDir, List<String> batchFiles, CollectionRequest request) {
-		if (!request.zip() || request.dryRun()) {
-			if (request.zip() && request.dryRun()) {
-				logger.info("DRY RUN: Would create ZIP file with {} batch files", batchFiles.size());
-			}
+		if (!request.zip()) {
 			return;
 		}
 
-		try {
-			// Use the appropriate state field based on collection type
-			String state = getCollectionType().equals("prs") ? request.prState() : request.issueState();
-			String zipFilename = String.format("%s_%s_%s.zip", getCollectionType(),
-					request.repository().replace("/", "_"), state);
-			Path zipPath = outputDir.resolve(zipFilename);
-
-			try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipPath.toFile()))) {
-				for (String batchFile : batchFiles) {
-					Path filePath = outputDir.resolve(batchFile);
-					if (Files.exists(filePath)) {
-						ZipEntry entry = new ZipEntry(batchFile);
-						zos.putNextEntry(entry);
-						Files.copy(filePath, zos);
-						zos.closeEntry();
-					}
-				}
-			}
-
-			logger.info("Created ZIP file: {} with {} batch files", zipFilename, batchFiles.size());
-
-		}
-		catch (Exception e) {
-			logger.error("Failed to create ZIP file", e);
-			throw new RuntimeException("Failed to create ZIP file", e);
-		}
-	}
-
-	/**
-	 * Calculate adaptive batch size based on item content
-	 */
-	protected int calculateAdaptiveBatchSize(List<JsonNode> items, int requestedBatchSize) {
-		if (items.isEmpty()) {
-			return requestedBatchSize;
-		}
-
-		try {
-			// Calculate average size of current items
-			int totalSize = 0;
-			for (JsonNode item : items) {
-				String itemJson = objectMapper.writeValueAsString(item);
-				totalSize += itemJson.length();
-			}
-
-			int averageSize = totalSize / items.size();
-
-			// If items are large, reduce batch size
-			if (averageSize > LARGE_ISSUE_THRESHOLD) {
-				int adaptiveBatchSize = Math.max(1, requestedBatchSize / 2);
-				logger.info("Large items detected (avg: {} bytes), reducing batch size to {}", averageSize,
-						adaptiveBatchSize);
-				return adaptiveBatchSize;
-			}
-
-			return requestedBatchSize;
-
-		}
-		catch (Exception e) {
-			logger.warn("Failed to calculate adaptive batch size: {}", e.getMessage());
-			return requestedBatchSize;
-		}
+		String state = getCollectionType().equals("prs") ? request.prState() : request.issueState();
+		String archiveName = String.format("%s_%s_%s", getCollectionType(), request.repository().replace("/", "_"),
+				state);
+		archiveService.createArchive(outputDir, batchFiles, archiveName, request.dryRun());
 	}
 
 	/**

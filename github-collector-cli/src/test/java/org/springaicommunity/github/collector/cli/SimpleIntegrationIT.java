@@ -110,7 +110,7 @@ class SimpleIntegrationIT {
 		}
 
 		try {
-			CollectionResult result = collectionService.collectIssues(request);
+			CollectionResult result = collectionService.collectItems(request);
 
 			// Should handle zero results gracefully
 			assertThat(result).isNotNull();

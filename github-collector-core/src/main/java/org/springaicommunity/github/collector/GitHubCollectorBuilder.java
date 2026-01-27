@@ -33,6 +33,12 @@ import java.io.IOException;
  * // Collect issues
  * CollectionRequest request = new CollectionRequest("spring-projects/spring-ai", ...);
  * CollectionResult result = collector.collectIssues(request);
+ *
+ * // For testing with mock HTTP client
+ * GitHubClient mockClient = mock(GitHubClient.class);
+ * IssueCollectionService testCollector = GitHubCollectorBuilder.create()
+ *     .httpClient(mockClient)
+ *     .buildIssueCollector();
  * }
  * </pre>
  */
@@ -43,6 +49,14 @@ public class GitHubCollectorBuilder {
 	private CollectionProperties properties;
 
 	private ObjectMapper objectMapper;
+
+	private GitHubClient httpClient;
+
+	private CollectionStateRepository stateRepository;
+
+	private ArchiveService archiveService;
+
+	private BatchStrategy batchStrategy;
 
 	private GitHubCollectorBuilder() {
 		this.properties = new CollectionProperties();
@@ -101,6 +115,53 @@ public class GitHubCollectorBuilder {
 	}
 
 	/**
+	 * Set a custom GitHubClient implementation. Useful for testing with mocks or for
+	 * adding decorators (caching, logging, retrying).
+	 *
+	 * <p>
+	 * When a custom client is provided, the token is not required.
+	 * @param httpClient custom GitHubClient implementation
+	 * @return this builder
+	 */
+	public GitHubCollectorBuilder httpClient(GitHubClient httpClient) {
+		this.httpClient = httpClient;
+		return this;
+	}
+
+	/**
+	 * Set a custom CollectionStateRepository implementation. Useful for testing with
+	 * mocks or for alternative storage backends.
+	 * @param stateRepository custom CollectionStateRepository implementation
+	 * @return this builder
+	 */
+	public GitHubCollectorBuilder stateRepository(CollectionStateRepository stateRepository) {
+		this.stateRepository = stateRepository;
+		return this;
+	}
+
+	/**
+	 * Set a custom ArchiveService implementation. Useful for testing with mocks or for
+	 * alternative archive formats.
+	 * @param archiveService custom ArchiveService implementation
+	 * @return this builder
+	 */
+	public GitHubCollectorBuilder archiveService(ArchiveService archiveService) {
+		this.archiveService = archiveService;
+		return this;
+	}
+
+	/**
+	 * Set a custom BatchStrategy implementation. Useful for testing with mocks or for
+	 * alternative batching behaviors.
+	 * @param batchStrategy custom BatchStrategy implementation
+	 * @return this builder
+	 */
+	public GitHubCollectorBuilder batchStrategy(BatchStrategy batchStrategy) {
+		this.batchStrategy = batchStrategy;
+		return this;
+	}
+
+	/**
 	 * Build an IssueCollectionService.
 	 * @return configured IssueCollectionService
 	 */
@@ -108,7 +169,8 @@ public class GitHubCollectorBuilder {
 		validateToken();
 		Components components = buildComponents();
 		return new IssueCollectionService(components.graphQLService, components.restService, components.jsonNodeUtils,
-				components.objectMapper, properties);
+				components.objectMapper, properties, components.stateRepository, components.archiveService,
+				components.batchStrategy);
 	}
 
 	/**
@@ -119,28 +181,33 @@ public class GitHubCollectorBuilder {
 		validateToken();
 		Components components = buildComponents();
 		return new PRCollectionService(components.graphQLService, components.restService, components.jsonNodeUtils,
-				components.objectMapper, properties);
+				components.objectMapper, properties, components.stateRepository, components.archiveService,
+				components.batchStrategy);
 	}
 
 	/**
-	 * Build the GitHubRestService directly (for advanced usage).
-	 * @return configured GitHubRestService
+	 * Build the RestService directly (for advanced usage).
+	 * @return configured RestService
 	 */
-	public GitHubRestService buildRestService() {
+	public RestService buildRestService() {
 		validateToken();
 		return buildComponents().restService;
 	}
 
 	/**
-	 * Build the GitHubGraphQLService directly (for advanced usage).
-	 * @return configured GitHubGraphQLService
+	 * Build the GraphQLService directly (for advanced usage).
+	 * @return configured GraphQLService
 	 */
-	public GitHubGraphQLService buildGraphQLService() {
+	public GraphQLService buildGraphQLService() {
 		validateToken();
 		return buildComponents().graphQLService;
 	}
 
 	private void validateToken() {
+		// Skip token validation if a custom httpClient is provided
+		if (httpClient != null) {
+			return;
+		}
 		if (token == null || token.trim().isEmpty()) {
 			throw new IllegalStateException("GitHub token is required. Call token() or tokenFromEnv() first.");
 		}
@@ -148,14 +215,18 @@ public class GitHubCollectorBuilder {
 
 	private Components buildComponents() {
 		ObjectMapper mapper = this.objectMapper != null ? this.objectMapper : createDefaultObjectMapper();
-		GitHubHttpClient httpClient = new GitHubHttpClient(token);
-		GitHub gitHub = createGitHub();
+		GitHubClient client = this.httpClient != null ? this.httpClient : new GitHubHttpClient(token);
+		GitHub gitHub = this.httpClient != null ? null : createGitHub();
+		CollectionStateRepository repository = this.stateRepository != null ? this.stateRepository
+				: new FileSystemStateRepository(mapper);
+		ArchiveService archive = this.archiveService != null ? this.archiveService : new ZipArchiveService();
+		BatchStrategy batch = this.batchStrategy != null ? this.batchStrategy : new FixedBatchStrategy();
 
-		GitHubRestService restService = new GitHubRestService(gitHub, httpClient, mapper);
-		GitHubGraphQLService graphQLService = new GitHubGraphQLService(httpClient, mapper);
+		GitHubRestService restService = new GitHubRestService(gitHub, client, mapper);
+		GitHubGraphQLService graphQLService = new GitHubGraphQLService(client, mapper);
 		JsonNodeUtils jsonNodeUtils = new JsonNodeUtils();
 
-		return new Components(restService, graphQLService, jsonNodeUtils, mapper);
+		return new Components(restService, graphQLService, jsonNodeUtils, mapper, repository, archive, batch);
 	}
 
 	private ObjectMapper createDefaultObjectMapper() {
@@ -176,8 +247,9 @@ public class GitHubCollectorBuilder {
 	/**
 	 * Internal record to hold built components.
 	 */
-	private record Components(GitHubRestService restService, GitHubGraphQLService graphQLService,
-			JsonNodeUtils jsonNodeUtils, ObjectMapper objectMapper) {
+	private record Components(RestService restService, GraphQLService graphQLService, JsonNodeUtils jsonNodeUtils,
+			ObjectMapper objectMapper, CollectionStateRepository stateRepository, ArchiveService archiveService,
+			BatchStrategy batchStrategy) {
 	}
 
 }

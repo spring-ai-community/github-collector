@@ -181,7 +181,7 @@ class ConfigurationSupportTest {
 		@Test
 		@DisplayName("Should build REST service with token")
 		void shouldBuildRestServiceWithToken() {
-			GitHubRestService restService = GitHubCollectorBuilder.create().token("test-token").buildRestService();
+			RestService restService = GitHubCollectorBuilder.create().token("test-token").buildRestService();
 
 			assertThat(restService).isNotNull();
 		}
@@ -189,9 +189,7 @@ class ConfigurationSupportTest {
 		@Test
 		@DisplayName("Should build GraphQL service with token")
 		void shouldBuildGraphQLServiceWithToken() {
-			GitHubGraphQLService graphQLService = GitHubCollectorBuilder.create()
-				.token("test-token")
-				.buildGraphQLService();
+			GraphQLService graphQLService = GitHubCollectorBuilder.create().token("test-token").buildGraphQLService();
 
 			assertThat(graphQLService).isNotNull();
 		}
