@@ -1,6 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,22 +14,26 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Base class for collection services providing common orchestration for issues and PRs.
  *
  * <p>
+ * Uses generic type parameter to work with strongly-typed DTOs (Issue, PullRequest)
+ * instead of raw JSON nodes.
+ *
+ * <p>
  * Delegates to extracted services for specific responsibilities:
  * <ul>
  * <li>{@link CollectionStateRepository} - file I/O operations</li>
  * <li>{@link ArchiveService} - ZIP archive creation</li>
  * <li>{@link BatchStrategy} - batch creation logic</li>
  * </ul>
+ *
+ * @param <T> the type of items being collected (e.g., Issue, PullRequest)
  */
-public abstract class BaseCollectionService {
+public abstract class BaseCollectionService<T> {
 
 	private static final Logger logger = LoggerFactory.getLogger(BaseCollectionService.class);
 
 	protected final GraphQLService graphQLService;
 
 	protected final RestService restService;
-
-	protected final JsonNodeUtils jsonUtils;
 
 	protected final ObjectMapper objectMapper;
 
@@ -40,34 +43,18 @@ public abstract class BaseCollectionService {
 
 	protected final ArchiveService archiveService;
 
-	protected final BatchStrategy batchStrategy;
+	protected final BatchStrategy<T> batchStrategy;
 
-	// Configuration constants exposed for subclasses
-	protected final int MAX_BATCH_SIZE_BYTES;
-
-	protected final int LARGE_ISSUE_THRESHOLD;
-
-	protected final int SIZE_THRESHOLD;
-
-	protected final String RESUME_FILE;
-
-	public BaseCollectionService(GraphQLService graphQLService, RestService restService, JsonNodeUtils jsonUtils,
-			ObjectMapper objectMapper, CollectionProperties properties, CollectionStateRepository stateRepository,
-			ArchiveService archiveService, BatchStrategy batchStrategy) {
+	public BaseCollectionService(GraphQLService graphQLService, RestService restService, ObjectMapper objectMapper,
+			CollectionProperties properties, CollectionStateRepository stateRepository, ArchiveService archiveService,
+			BatchStrategy<T> batchStrategy) {
 		this.graphQLService = graphQLService;
 		this.restService = restService;
-		this.jsonUtils = jsonUtils;
 		this.objectMapper = objectMapper;
 		this.properties = properties;
 		this.stateRepository = stateRepository;
 		this.archiveService = archiveService;
 		this.batchStrategy = batchStrategy;
-
-		// Initialize configuration constants from properties
-		this.MAX_BATCH_SIZE_BYTES = properties.getMaxBatchSizeBytes();
-		this.LARGE_ISSUE_THRESHOLD = properties.getLargeIssueThreshold();
-		this.SIZE_THRESHOLD = properties.getSizeThreshold();
-		this.RESUME_FILE = properties.getResumeFile();
 	}
 
 	/**
@@ -91,30 +78,18 @@ public abstract class BaseCollectionService {
 	protected abstract String buildSearchQuery(String owner, String repo, CollectionRequest request);
 
 	/**
-	 * Fetch a batch of items
+	 * Fetch a batch of items with pagination info.
+	 * @param searchQuery the search query
+	 * @param batchSize number of items to fetch
+	 * @param cursor pagination cursor (null for first page)
+	 * @return SearchResult containing typed items and pagination info
 	 */
-	protected abstract List<JsonNode> fetchBatch(String searchQuery, int batchSize, String cursor);
-
-	/**
-	 * Fetch batch of items from API and return the complete response (for pagination)
-	 */
-	protected abstract JsonNode fetchBatchWithResponse(String searchQuery, int batchSize, String cursor);
-
-	/**
-	 * Extract cursor for pagination
-	 */
-	protected abstract Optional<String> extractCursor(JsonNode response);
-
-	/**
-	 * Extract items from response
-	 */
-	protected abstract List<JsonNode> extractItems(JsonNode response);
+	protected abstract SearchResult<T> fetchBatch(String searchQuery, int batchSize, String cursor);
 
 	/**
 	 * Process items in current batch (e.g., enhance with additional data)
 	 */
-	protected abstract List<JsonNode> processItemBatch(List<JsonNode> batch, String owner, String repo,
-			CollectionRequest request);
+	protected abstract List<T> processItemBatch(List<T> batch, String owner, String repo, CollectionRequest request);
 
 	/**
 	 * Get item type name for logging (e.g., "issues", "PRs")
@@ -122,8 +97,7 @@ public abstract class BaseCollectionService {
 	protected abstract String getItemTypeName();
 
 	/**
-	 * Template method for collecting items in batches with shared pagination logic. This
-	 * eliminates duplication between IssueCollectionService and PRCollectionService.
+	 * Template method for collecting items in batches with shared pagination logic.
 	 */
 	protected CollectionResult collectItemsInBatches(String owner, String repo, CollectionRequest request,
 			Path outputDir, String searchQuery, int totalAvailableItems) throws Exception {
@@ -133,22 +107,12 @@ public abstract class BaseCollectionService {
 		boolean hasMoreFromAPI = true;
 		AtomicInteger processedCount = new AtomicInteger(0);
 
-		// Use dashboard-optimized fetching if maxIssues is specified
 		int targetBatchSize = request.batchSize();
 		boolean isDashboardMode = request.maxIssues() != null;
 		int effectiveTotal = isDashboardMode ? Math.min(totalAvailableItems, request.maxIssues()) : totalAvailableItems;
-		int fetchSize = isDashboardMode ? Math.min(request.maxIssues(), 100) : // Dashboard:
-																				// limit
-																				// to
-																				// maxIssues
-																				// but
-																				// respect
-																				// API
-																				// limits
-				Math.max(targetBatchSize, 100); // Full mode: use larger fetch for
-												// efficiency
+		int fetchSize = isDashboardMode ? Math.min(request.maxIssues(), 100) : Math.max(targetBatchSize, 100);
 
-		List<JsonNode> pendingItems = new ArrayList<>();
+		List<T> pendingItems = new ArrayList<>();
 
 		while (hasMoreFromAPI || !pendingItems.isEmpty()) {
 			// Check if we've reached the maxIssues limit in dashboard mode
@@ -160,7 +124,6 @@ public abstract class BaseCollectionService {
 
 			// Fetch more items if needed
 			if (pendingItems.size() < targetBatchSize && hasMoreFromAPI) {
-				// Calculate remaining items to fetch in dashboard mode
 				int remainingToFetch = isDashboardMode ? effectiveTotal - processedCount.get() : fetchSize;
 				int actualFetchSize = Math.min(fetchSize, remainingToFetch);
 
@@ -170,33 +133,31 @@ public abstract class BaseCollectionService {
 				logger.info("Fetching {} from API (cursor: {}, fetch size: {}, dashboard mode: {})", getItemTypeName(),
 						cursor != null ? "present" : "null", actualFetchSize, isDashboardMode);
 
-				// Fetch batch from API using abstract method
-				JsonNode searchResponse = fetchBatchWithResponse(searchQuery, actualFetchSize, cursor);
-				List<JsonNode> batch = extractItems(searchResponse);
+				// Fetch batch using typed SearchResult
+				SearchResult<T> searchResult = fetchBatch(searchQuery, actualFetchSize, cursor);
 
-				// Update pagination using abstract method
-				Optional<String> nextCursor = extractCursor(searchResponse);
-				hasMoreFromAPI = determineHasMore(batch, actualFetchSize, nextCursor);
-				cursor = nextCursor.orElse(null);
+				// Update pagination
+				hasMoreFromAPI = searchResult.hasMore();
+				cursor = searchResult.nextCursor();
 
 				// Add to pending items
-				pendingItems.addAll(batch);
+				pendingItems.addAll(searchResult.items());
 
-				logger.info("Fetched {} {}, {} pending, dashboard limit: {}", batch.size(), getItemTypeName(),
-						pendingItems.size(), isDashboardMode ? effectiveTotal : "unlimited");
+				logger.info("Fetched {} {}, {} pending, dashboard limit: {}", searchResult.items().size(),
+						getItemTypeName(), pendingItems.size(), isDashboardMode ? effectiveTotal : "unlimited");
 			}
 
 			// Create batch, respecting dashboard limits
 			int maxBatchSize = isDashboardMode ? Math.min(targetBatchSize, effectiveTotal - processedCount.get())
 					: targetBatchSize;
-			List<JsonNode> currentBatch = batchStrategy.createBatch(pendingItems, maxBatchSize);
+			List<T> currentBatch = batchStrategy.createBatch(pendingItems, maxBatchSize);
 
 			if (currentBatch.isEmpty()) {
-				break; // No more items to process
+				break;
 			}
 
 			// Process items (e.g., enhance PRs with soft approval detection)
-			List<JsonNode> processedItems = processItemBatch(currentBatch, owner, repo, request);
+			List<T> processedItems = processItemBatch(currentBatch, owner, repo, request);
 
 			// Save batch to file
 			String filename = saveBatchToFile(outputDir, batchNum, processedItems, request);
@@ -222,12 +183,6 @@ public abstract class BaseCollectionService {
 	}
 
 	/**
-	 * Determine if there are more items available from the API. Different APIs use
-	 * different pagination mechanisms.
-	 */
-	protected abstract boolean determineHasMore(List<JsonNode> batch, int requestedSize, Optional<String> nextCursor);
-
-	/**
 	 * Common validation logic for collection requests
 	 */
 	protected CollectionRequest validateRequest(CollectionRequest request) {
@@ -244,9 +199,6 @@ public abstract class BaseCollectionService {
 		}
 
 		int batchSize = request.batchSize() <= 0 ? properties.getBatchSize() : request.batchSize();
-		// Note: Using getBatchSize() as both default and max since no separate max method
-		// exists
-		// In production, you'd want a separate max batch size configuration
 
 		String state = request.issueState();
 		if (state == null || state.trim().isEmpty()) {
@@ -285,7 +237,7 @@ public abstract class BaseCollectionService {
 	/**
 	 * Save batch data to file
 	 */
-	protected String saveBatchToFile(Path outputDir, int batchIndex, List<JsonNode> items, CollectionRequest request) {
+	protected String saveBatchToFile(Path outputDir, int batchIndex, List<T> items, CollectionRequest request) {
 		Map<String, Object> batchData = new HashMap<>();
 		batchData.put("metadata", createBatchMetadata(batchIndex, items.size(), request));
 		batchData.put(getCollectionType(), items);
@@ -302,7 +254,6 @@ public abstract class BaseCollectionService {
 		metadata.put("item_count", itemCount);
 		metadata.put("collection_type", getCollectionType());
 		metadata.put("repository", request.repository());
-		// Use the appropriate state field based on collection type
 		String state = getCollectionType().equals("prs") ? request.prState() : request.issueState();
 		metadata.put("state", state);
 		metadata.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
@@ -349,7 +300,7 @@ public abstract class BaseCollectionService {
 		logger.error("Collection attempt {} failed: {}", attempt, e.getMessage());
 
 		if (attempt < maxRetries) {
-			int delaySeconds = (int) Math.pow(2, attempt); // Exponential backoff
+			int delaySeconds = (int) Math.pow(2, attempt);
 			logger.info("Retrying in {} seconds... (attempt {}/{})", delaySeconds, attempt + 1, maxRetries);
 
 			try {

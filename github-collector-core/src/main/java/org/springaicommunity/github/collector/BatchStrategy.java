@@ -1,7 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
 import java.util.List;
 
 /**
@@ -9,8 +7,10 @@ import java.util.List;
  *
  * <p>
  * Allows different batching strategies (fixed size, adaptive based on content size, etc.)
+ *
+ * @param <T> the type of items being batched
  */
-public interface BatchStrategy {
+public interface BatchStrategy<T> {
 
 	/**
 	 * Create a batch from pending items. Items included in the batch should be removed
@@ -19,7 +19,7 @@ public interface BatchStrategy {
 	 * @param maxBatchSize maximum number of items to include in the batch
 	 * @return list of items for the current batch
 	 */
-	List<JsonNode> createBatch(List<JsonNode> pendingItems, int maxBatchSize);
+	List<T> createBatch(List<T> pendingItems, int maxBatchSize);
 
 	/**
 	 * Calculate the recommended batch size based on item characteristics.
@@ -27,6 +27,6 @@ public interface BatchStrategy {
 	 * @param requestedBatchSize the originally requested batch size
 	 * @return recommended batch size (may be smaller than requested for large items)
 	 */
-	int calculateBatchSize(List<JsonNode> sampleItems, int requestedBatchSize);
+	int calculateBatchSize(List<T> sampleItems, int requestedBatchSize);
 
 }

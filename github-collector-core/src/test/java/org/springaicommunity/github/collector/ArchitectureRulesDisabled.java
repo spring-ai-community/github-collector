@@ -26,7 +26,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * <li><b>GitHub Services</b>: GitHubRestService, GitHubGraphQLService</li>
  * <li><b>Collection Services</b>: IssueCollectionService, PRCollectionService,
  * BaseCollectionService</li>
- * <li><b>Support</b>: GitHubHttpClient, JsonNodeUtils, ArgumentParser</li>
+ * <li><b>Support</b>: GitHubHttpClient, ArgumentParser</li>
  * <li><b>Configuration</b>: CollectionProperties, GitHubCollectorBuilder</li>
  * </ul>
  *

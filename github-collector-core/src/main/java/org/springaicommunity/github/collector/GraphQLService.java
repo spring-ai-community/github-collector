@@ -1,22 +1,13 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
 /**
  * Interface for GitHub GraphQL API operations.
  *
  * <p>
- * Extracted to enable mocking in tests and support decorator pattern.
+ * Returns strongly-typed DTOs instead of raw JSON to provide type safety and encapsulate
+ * the GitHub API response structure.
  */
 public interface GraphQLService {
-
-	/**
-	 * Execute a GraphQL query with variables.
-	 * @param query GraphQL query string
-	 * @param variables Query variables (can be null)
-	 * @return Query result as JsonNode
-	 */
-	JsonNode executeQuery(String query, Object variables);
 
 	/**
 	 * Get total issue count for a repository.
@@ -35,14 +26,14 @@ public interface GraphQLService {
 	int getSearchIssueCount(String searchQuery);
 
 	/**
-	 * Execute GitHub search with sorting and limiting support for dashboard use cases.
+	 * Search for issues with sorting and pagination support.
 	 * @param searchQuery The formatted search query string
 	 * @param sortBy Sort field (updated/created/comments/reactions)
 	 * @param sortOrder Sort direction (desc/asc)
 	 * @param first Number of issues to fetch
 	 * @param after Cursor for pagination (null for first page)
-	 * @return JsonNode containing search results with pagination info
+	 * @return SearchResult containing Issue records and pagination info
 	 */
-	JsonNode searchIssuesWithSorting(String searchQuery, String sortBy, String sortOrder, int first, String after);
+	SearchResult<Issue> searchIssues(String searchQuery, String sortBy, String sortOrder, int first, String after);
 
 }

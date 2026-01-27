@@ -1,6 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,8 +13,10 @@ import java.util.List;
  * <p>
  * Reduces batch size when items are large to prevent memory issues and improve processing
  * efficiency.
+ *
+ * @param <T> the type of items being batched
  */
-public class AdaptiveBatchStrategy implements BatchStrategy {
+public class AdaptiveBatchStrategy<T> implements BatchStrategy<T> {
 
 	private static final Logger logger = LoggerFactory.getLogger(AdaptiveBatchStrategy.class);
 
@@ -35,13 +36,13 @@ public class AdaptiveBatchStrategy implements BatchStrategy {
 	}
 
 	@Override
-	public List<JsonNode> createBatch(List<JsonNode> pendingItems, int maxBatchSize) {
+	public List<T> createBatch(List<T> pendingItems, int maxBatchSize) {
 		if (pendingItems.isEmpty()) {
 			return new ArrayList<>();
 		}
 
 		int batchSize = Math.min(maxBatchSize, pendingItems.size());
-		List<JsonNode> batch = new ArrayList<>(pendingItems.subList(0, batchSize));
+		List<T> batch = new ArrayList<>(pendingItems.subList(0, batchSize));
 
 		// Remove processed items from pending list
 		pendingItems.subList(0, batchSize).clear();
@@ -50,7 +51,7 @@ public class AdaptiveBatchStrategy implements BatchStrategy {
 	}
 
 	@Override
-	public int calculateBatchSize(List<JsonNode> sampleItems, int requestedBatchSize) {
+	public int calculateBatchSize(List<T> sampleItems, int requestedBatchSize) {
 		if (sampleItems.isEmpty()) {
 			return requestedBatchSize;
 		}
@@ -58,7 +59,7 @@ public class AdaptiveBatchStrategy implements BatchStrategy {
 		try {
 			// Calculate average size of sample items
 			int totalSize = 0;
-			for (JsonNode item : sampleItems) {
+			for (T item : sampleItems) {
 				String itemJson = objectMapper.writeValueAsString(item);
 				totalSize += itemJson.length();
 			}

@@ -1,9 +1,6 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -18,8 +15,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
@@ -42,8 +40,6 @@ class PRCollectionServiceTest {
 	@Mock
 	private RestService mockRestService;
 
-	private JsonNodeUtils realJsonUtils;
-
 	private CollectionProperties realProperties;
 
 	@Mock
@@ -53,7 +49,7 @@ class PRCollectionServiceTest {
 	private ArchiveService mockArchiveService;
 
 	@Mock
-	private BatchStrategy mockBatchStrategy;
+	private BatchStrategy<AnalyzedPullRequest> mockBatchStrategy;
 
 	private ObjectMapper realObjectMapper;
 
@@ -66,7 +62,6 @@ class PRCollectionServiceTest {
 	void setUp() {
 		realObjectMapper = new ObjectMapper();
 		realObjectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-		realJsonUtils = new JsonNodeUtils();
 
 		// Setup real properties with safe defaults
 		realProperties = new CollectionProperties();
@@ -77,8 +72,8 @@ class PRCollectionServiceTest {
 		realProperties.setMaxRetries(3);
 		realProperties.setRetryDelay(1);
 
-		prCollectionService = new PRCollectionService(mockGraphQLService, mockRestService, realJsonUtils,
-				realObjectMapper, realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy);
+		prCollectionService = new PRCollectionService(mockGraphQLService, mockRestService, realObjectMapper,
+				realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy);
 	}
 
 	/**
@@ -100,39 +95,19 @@ class PRCollectionServiceTest {
 	/**
 	 * Helper to create mock PR data
 	 */
-	private JsonNode createMockPRData(int number, String title, String state) {
-		ObjectNode pr = realObjectMapper.createObjectNode();
-		pr.put("number", number);
-		pr.put("title", title);
-		pr.put("state", state);
-		pr.put("html_url", "https://github.com/owner/repo/pull/" + number);
-		return pr;
+	private PullRequest createMockPullRequest(int number, String title, String state) {
+		return new PullRequest(number, title, "Description for " + title, state, LocalDateTime.now(),
+				LocalDateTime.now(), null, null, "https://api.github.com/repos/owner/repo/pulls/" + number,
+				"https://github.com/owner/repo/pull/" + number, new Author("test-author", "Test Author"), List.of(),
+				List.of(), List.of(), false, false, null, "feature-branch", "main", 10, 5, 2);
 	}
 
 	/**
 	 * Helper to create mock review data
 	 */
-	private JsonNode createMockReviewData(String state, String authorAssociation, String login) {
-		ObjectNode review = realObjectMapper.createObjectNode();
-		review.put("state", state);
-		review.put("author_association", authorAssociation);
-		ObjectNode user = realObjectMapper.createObjectNode();
-		user.put("login", login);
-		review.set("user", user);
-		review.put("submitted_at", "2024-01-15T10:30:00Z");
-		return review;
-	}
-
-	/**
-	 * Helper to create mock search response
-	 */
-	private JsonNode createMockSearchResponse(List<JsonNode> items) {
-		ObjectNode response = realObjectMapper.createObjectNode();
-		response.put("total_count", items.size());
-		ArrayNode itemsArray = realObjectMapper.createArrayNode();
-		items.forEach(itemsArray::add);
-		response.set("items", itemsArray);
-		return response;
+	private Review createMockReview(String state, String authorAssociation, String login) {
+		return new Review(1L, "Review body", state, LocalDateTime.now(), new Author(login, login), authorAssociation,
+				"https://github.com/owner/repo/pull/1#pullrequestreview-1");
 	}
 
 	@Nested
@@ -224,8 +199,8 @@ class PRCollectionServiceTest {
 		@DisplayName("Should collect specific PR by number")
 		void shouldCollectSpecificPRByNumber() {
 			// Setup mocks
-			JsonNode mockPR = createMockPRData(123, "Fix critical bug", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
+			PullRequest mockPR = createMockPullRequest(123, "Fix critical bug", "open");
+			List<Review> mockReviews = List.of();
 
 			when(mockRestService.getPullRequest("owner", "repo", 123)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 123)).thenReturn(mockReviews);
@@ -251,9 +226,8 @@ class PRCollectionServiceTest {
 		@DisplayName("Should enhance PR with soft approval when contributor approves")
 		void shouldEnhancePRWithSoftApprovalWhenContributorApproves() {
 			// Setup
-			JsonNode mockPR = createMockPRData(456, "Add new feature", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
-			mockReviews.add(createMockReviewData("APPROVED", "CONTRIBUTOR", "helpful-contributor"));
+			PullRequest mockPR = createMockPullRequest(456, "Add new feature", "open");
+			List<Review> mockReviews = List.of(createMockReview("APPROVED", "CONTRIBUTOR", "helpful-contributor"));
 
 			when(mockRestService.getPullRequest("owner", "repo", 456)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 456)).thenReturn(mockReviews);
@@ -294,9 +268,8 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should detect soft approval from CONTRIBUTOR")
 		void shouldDetectSoftApprovalFromContributor() {
-			JsonNode mockPR = createMockPRData(100, "Test PR", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
-			mockReviews.add(createMockReviewData("APPROVED", "CONTRIBUTOR", "contributor-user"));
+			PullRequest mockPR = createMockPullRequest(100, "Test PR", "open");
+			List<Review> mockReviews = List.of(createMockReview("APPROVED", "CONTRIBUTOR", "contributor-user"));
 
 			when(mockRestService.getPullRequest("owner", "repo", 100)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 100)).thenReturn(mockReviews);
@@ -314,9 +287,9 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should detect soft approval from FIRST_TIME_CONTRIBUTOR")
 		void shouldDetectSoftApprovalFromFirstTimeContributor() {
-			JsonNode mockPR = createMockPRData(101, "First contribution", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
-			mockReviews.add(createMockReviewData("APPROVED", "FIRST_TIME_CONTRIBUTOR", "new-contributor"));
+			PullRequest mockPR = createMockPullRequest(101, "First contribution", "open");
+			List<Review> mockReviews = List
+				.of(createMockReview("APPROVED", "FIRST_TIME_CONTRIBUTOR", "new-contributor"));
 
 			when(mockRestService.getPullRequest("owner", "repo", 101)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 101)).thenReturn(mockReviews);
@@ -333,9 +306,8 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should NOT detect soft approval from MEMBER")
 		void shouldNotDetectSoftApprovalFromMember() {
-			JsonNode mockPR = createMockPRData(102, "Member approved", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
-			mockReviews.add(createMockReviewData("APPROVED", "MEMBER", "team-member"));
+			PullRequest mockPR = createMockPullRequest(102, "Member approved", "open");
+			List<Review> mockReviews = List.of(createMockReview("APPROVED", "MEMBER", "team-member"));
 
 			when(mockRestService.getPullRequest("owner", "repo", 102)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 102)).thenReturn(mockReviews);
@@ -353,10 +325,9 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should NOT detect soft approval for non-APPROVED reviews")
 		void shouldNotDetectSoftApprovalForNonApprovedReviews() {
-			JsonNode mockPR = createMockPRData(103, "Changes requested", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
-			mockReviews.add(createMockReviewData("CHANGES_REQUESTED", "CONTRIBUTOR", "reviewer"));
-			mockReviews.add(createMockReviewData("COMMENTED", "FIRST_TIME_CONTRIBUTOR", "commenter"));
+			PullRequest mockPR = createMockPullRequest(103, "Changes requested", "open");
+			List<Review> mockReviews = List.of(createMockReview("CHANGES_REQUESTED", "CONTRIBUTOR", "reviewer"),
+					createMockReview("COMMENTED", "FIRST_TIME_CONTRIBUTOR", "commenter"));
 
 			when(mockRestService.getPullRequest("owner", "repo", 103)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 103)).thenReturn(mockReviews);
@@ -373,8 +344,8 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle empty reviews array")
 		void shouldHandleEmptyReviewsArray() {
-			JsonNode mockPR = createMockPRData(104, "No reviews yet", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode(); // Empty
+			PullRequest mockPR = createMockPullRequest(104, "No reviews yet", "open");
+			List<Review> mockReviews = List.of(); // Empty
 
 			when(mockRestService.getPullRequest("owner", "repo", 104)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 104)).thenReturn(mockReviews);
@@ -391,12 +362,10 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle null reviews response")
 		void shouldHandleNullReviewsResponse() {
-			JsonNode mockPR = createMockPRData(105, "Null reviews", "open");
-			ObjectNode notArrayReviews = realObjectMapper.createObjectNode(); // Not an
-																				// array
+			PullRequest mockPR = createMockPullRequest(105, "Null reviews", "open");
 
 			when(mockRestService.getPullRequest("owner", "repo", 105)).thenReturn(mockPR);
-			when(mockRestService.getPullRequestReviews("owner", "repo", 105)).thenReturn(notArrayReviews);
+			when(mockRestService.getPullRequestReviews("owner", "repo", 105)).thenReturn(List.of());
 			when(mockStateRepository.createOutputDirectory(anyString(), anyString(), anyString())).thenReturn(tempDir);
 			when(mockStateRepository.saveBatch(any(), anyInt(), any(), anyString(), anyBoolean()))
 				.thenReturn("batch_001_prs.json");
@@ -416,24 +385,24 @@ class PRCollectionServiceTest {
 		@DisplayName("Should collect multiple PRs with pagination")
 		void shouldCollectMultiplePRsWithPagination() {
 			// Setup search response
-			JsonNode pr1 = createMockPRData(1, "PR 1", "open");
-			JsonNode pr2 = createMockPRData(2, "PR 2", "open");
-			JsonNode searchResponse = createMockSearchResponse(List.of(pr1, pr2));
+			PullRequest pr1 = createMockPullRequest(1, "PR 1", "open");
+			PullRequest pr2 = createMockPullRequest(2, "PR 2", "open");
+			SearchResult<PullRequest> searchResult = new SearchResult<>(List.of(pr1, pr2), null, false);
 
-			ArrayNode emptyReviews = realObjectMapper.createArrayNode();
+			List<Review> emptyReviews = List.of();
 
 			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(2);
-			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(searchResponse);
+			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(searchResult);
 			when(mockRestService.getPullRequestReviews(anyString(), anyString(), anyInt())).thenReturn(emptyReviews);
 			when(mockStateRepository.createOutputDirectory(anyString(), anyString(), anyString())).thenReturn(tempDir);
 			when(mockStateRepository.saveBatch(any(), anyInt(), any(), anyString(), anyBoolean()))
 				.thenReturn("batch_001_prs.json");
 			when(mockBatchStrategy.createBatch(anyList(), anyInt())).thenAnswer(inv -> {
-				List<JsonNode> pending = inv.getArgument(0);
+				List<AnalyzedPullRequest> pending = inv.getArgument(0);
 				int size = Math.min(inv.getArgument(1), pending.size());
-				List<JsonNode> batch = new java.util.ArrayList<>(pending.subList(0, size));
+				List<AnalyzedPullRequest> batch = new ArrayList<>(pending.subList(0, size));
 				pending.subList(0, size).clear();
 				return batch;
 			});
@@ -449,12 +418,12 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle empty search results")
 		void shouldHandleEmptySearchResults() {
-			JsonNode emptyResponse = createMockSearchResponse(List.of());
+			SearchResult<PullRequest> emptyResult = SearchResult.empty();
 
 			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(0);
-			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(emptyResponse);
+			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(emptyResult);
 			when(mockStateRepository.createOutputDirectory(anyString(), anyString(), anyString())).thenReturn(tempDir);
 			when(mockBatchStrategy.createBatch(anyList(), anyInt())).thenReturn(List.of());
 
@@ -589,8 +558,8 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should create ZIP when requested for specific PR")
 		void shouldCreateZipWhenRequestedForSpecificPR() {
-			JsonNode mockPR = createMockPRData(200, "Test PR", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
+			PullRequest mockPR = createMockPullRequest(200, "Test PR", "open");
+			List<Review> mockReviews = List.of();
 
 			when(mockRestService.getPullRequest("owner", "repo", 200)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 200)).thenReturn(mockReviews);
@@ -611,8 +580,8 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should NOT create ZIP when not requested")
 		void shouldNotCreateZipWhenNotRequested() {
-			JsonNode mockPR = createMockPRData(201, "Test PR", "open");
-			ArrayNode mockReviews = realObjectMapper.createArrayNode();
+			PullRequest mockPR = createMockPullRequest(201, "Test PR", "open");
+			List<Review> mockReviews = List.of();
 
 			when(mockRestService.getPullRequest("owner", "repo", 201)).thenReturn(mockPR);
 			when(mockRestService.getPullRequestReviews("owner", "repo", 201)).thenReturn(mockReviews);

@@ -1,6 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,22 +8,22 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Collection service for GitHub pull requests with soft approval detection. Extends
- * BaseCollectionService with PR-specific functionality.
+ * Collection service for GitHub pull requests with soft approval detection.
+ *
+ * <p>
+ * Works with strongly-typed {@link AnalyzedPullRequest} records that include soft
+ * approval analysis results.
  */
-
-public class PRCollectionService extends BaseCollectionService {
+public class PRCollectionService extends BaseCollectionService<AnalyzedPullRequest> {
 
 	private static final Logger logger = LoggerFactory.getLogger(PRCollectionService.class);
 
-	public PRCollectionService(GraphQLService graphQLService, RestService restService, JsonNodeUtils jsonUtils,
-			ObjectMapper objectMapper, CollectionProperties properties, CollectionStateRepository stateRepository,
-			ArchiveService archiveService, BatchStrategy batchStrategy) {
-		super(graphQLService, restService, jsonUtils, objectMapper, properties, stateRepository, archiveService,
-				batchStrategy);
+	public PRCollectionService(GraphQLService graphQLService, RestService restService, ObjectMapper objectMapper,
+			CollectionProperties properties, CollectionStateRepository stateRepository, ArchiveService archiveService,
+			BatchStrategy<AnalyzedPullRequest> batchStrategy) {
+		super(graphQLService, restService, objectMapper, properties, stateRepository, archiveService, batchStrategy);
 	}
 
 	@Override
@@ -36,7 +35,6 @@ public class PRCollectionService extends BaseCollectionService {
 	public CollectionResult collectItems(CollectionRequest request) {
 		logger.info("Starting PR collection for repository: {}", request.repository());
 
-		// Validate and normalize request
 		CollectionRequest validatedRequest = validateRequest(request);
 
 		try {
@@ -71,23 +69,22 @@ public class PRCollectionService extends BaseCollectionService {
 		}
 
 		try {
-			// Create output directory
 			Path outputDir = createOutputDirectory(request);
 			cleanOutputDirectory(outputDir, request.clean());
 
 			// Get PR data
-			JsonNode prData = restService.getPullRequest(owner, repo, request.prNumber());
-			logger.info("PR #{} found: {}", request.prNumber(), jsonUtils.getString(prData, "title").orElse("Unknown"));
+			PullRequest prData = restService.getPullRequest(owner, repo, request.prNumber());
+			logger.info("PR #{} found: {}", request.prNumber(), prData.title());
 
 			// Get PR reviews for soft approval detection
-			JsonNode reviewsData = restService.getPullRequestReviews(owner, repo, request.prNumber());
-			logger.info("Found {} reviews for PR #{}", reviewsData.size(), request.prNumber());
+			List<Review> reviews = restService.getPullRequestReviews(owner, repo, request.prNumber());
+			logger.info("Found {} reviews for PR #{}", reviews.size(), request.prNumber());
 
-			// Enhance PR data with soft approval detection
-			JsonNode enhancedPR = enhancePRWithSoftApproval(prData, reviewsData);
+			// Analyze PR for soft approval
+			AnalyzedPullRequest analyzedPR = analyzePullRequest(prData, reviews);
 
 			// Save PR data
-			List<JsonNode> prList = List.of(enhancedPR);
+			List<AnalyzedPullRequest> prList = List.of(analyzedPR);
 			String filename = saveBatchToFile(outputDir, 1, prList, request);
 
 			// Create ZIP if requested
@@ -105,15 +102,12 @@ public class PRCollectionService extends BaseCollectionService {
 	}
 
 	/**
-	 * Collect multiple PRs using search - using proven issue collection pattern
+	 * Collect multiple PRs using search
 	 */
 	private CollectionResult collectMultiplePRs(String owner, String repo, CollectionRequest request) {
 		logger.info("Collecting {} PRs from {}/{}", request.prState(), owner, repo);
 
-		// Build search query
 		String searchQuery = buildSearchQuery(owner, repo, request);
-
-		// Get total count
 		int totalAvailableItems = getTotalItemCount(searchQuery);
 		logger.info("Found {} total {} PRs matching criteria", totalAvailableItems, request.prState());
 
@@ -122,7 +116,6 @@ public class PRCollectionService extends BaseCollectionService {
 			return new CollectionResult(totalAvailableItems, 0, "dry-run", List.of("pr_batch.json"));
 		}
 
-		// Create output directory
 		Path outputDir = createOutputDirectory(request);
 		cleanOutputDirectory(outputDir, request.clean());
 
@@ -147,19 +140,22 @@ public class PRCollectionService extends BaseCollectionService {
 	}
 
 	@Override
-	protected List<JsonNode> fetchBatch(String searchQuery, int batchSize, String cursor) {
-		// For now, use REST API search (could be enhanced with GraphQL later)
-		JsonNode searchResults = restService.searchPRs(searchQuery, batchSize, cursor);
-		return extractItems(searchResults);
+	protected SearchResult<AnalyzedPullRequest> fetchBatch(String searchQuery, int batchSize, String cursor) {
+		// Fetch PRs from REST API
+		SearchResult<PullRequest> prResult = restService.searchPRs(searchQuery, batchSize, cursor);
+
+		// Convert to AnalyzedPullRequest (without reviews for now - they're added in
+		// processItemBatch)
+		List<AnalyzedPullRequest> analyzedPRs = prResult.items()
+			.stream()
+			.map(pr -> AnalyzedPullRequest.from(pr, false, null, List.of()))
+			.toList();
+
+		return new SearchResult<>(analyzedPRs, prResult.nextCursor(), prResult.hasMore());
 	}
 
 	@Override
-	protected JsonNode fetchBatchWithResponse(String searchQuery, int batchSize, String cursor) {
-		return restService.searchPRs(searchQuery, batchSize, cursor);
-	}
-
-	@Override
-	protected List<JsonNode> processItemBatch(List<JsonNode> batch, String owner, String repo,
+	protected List<AnalyzedPullRequest> processItemBatch(List<AnalyzedPullRequest> batch, String owner, String repo,
 			CollectionRequest request) {
 		return enhancePRsWithSoftApproval(batch, owner, repo, request.verbose());
 	}
@@ -169,135 +165,93 @@ public class PRCollectionService extends BaseCollectionService {
 		return "PRs";
 	}
 
-	@Override
-	protected boolean determineHasMore(List<JsonNode> batch, int requestedSize, Optional<String> nextCursor) {
-		// For REST API pagination: if we got fewer items than requested, we're done
-		return batch.size() == requestedSize;
-	}
-
-	@Override
-	protected Optional<String> extractCursor(JsonNode response) {
-		// For REST API pagination, check if we have more pages
-		try {
-			JsonNode items = response.path("items");
-			if (!items.isArray() || items.size() == 0) {
-				return Optional.empty(); // No more pages
-			}
-
-			// GitHub search API returns information about pagination
-			// If items.size() is less than per_page, we're on the last page
-			// Since we don't know the exact per_page used, check if we got fewer than
-			// expected
-
-			// Conservative approach: if we got fewer than 30 items (GitHub's default
-			// per_page),
-			// assume we're on the last page
-			if (items.size() < 30) {
-				return Optional.empty();
-			}
-
-			// More items available, continue pagination
-			return Optional.of("next");
-		}
-		catch (Exception e) {
-			logger.warn("Failed to extract cursor from PR response: {}", e.getMessage());
-			return Optional.empty();
-		}
-	}
-
-	@Override
-	protected List<JsonNode> extractItems(JsonNode response) {
-		// Extract PRs from search response
-		return jsonUtils.getArray(response, "items");
-	}
-
 	/**
-	 * Enhance a single PR with soft approval detection
+	 * Analyze a single PR for soft approval
 	 */
-	private JsonNode enhancePRWithSoftApproval(JsonNode prData, JsonNode reviewsData) {
-		boolean hasSoftApproval = detectSoftApproval(reviewsData);
+	private AnalyzedPullRequest analyzePullRequest(PullRequest pr, List<Review> reviews) {
+		boolean hasSoftApproval = detectSoftApproval(reviews);
+		String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+		List<SoftApproval> softApprovals = hasSoftApproval ? extractSoftApprovals(reviews) : List.of();
 
-		// Create enhanced PR data with soft approval information
-		Map<String, Object> enhancedPR = objectMapper.convertValue(prData, Map.class);
-		enhancedPR.put("soft_approval_detected", hasSoftApproval);
-		enhancedPR.put("analysis_timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+		// Create PR with reviews included
+		PullRequest prWithReviews = new PullRequest(pr.number(), pr.title(), pr.body(), pr.state(), pr.createdAt(),
+				pr.updatedAt(), pr.closedAt(), pr.mergedAt(), pr.url(), pr.htmlUrl(), pr.author(), pr.comments(),
+				pr.labels(), reviews, pr.draft(), pr.merged(), pr.mergeCommitSha(), pr.headRef(), pr.baseRef(),
+				pr.additions(), pr.deletions(), pr.changedFiles());
 
-		if (hasSoftApproval) {
-			enhancedPR.put("soft_approval_details", extractSoftApprovalDetails(reviewsData));
-		}
-
-		return objectMapper.valueToTree(enhancedPR);
+		return AnalyzedPullRequest.from(prWithReviews, hasSoftApproval, timestamp, softApprovals);
 	}
 
 	/**
 	 * Enhance multiple PRs with soft approval detection
 	 */
-	private List<JsonNode> enhancePRsWithSoftApproval(List<JsonNode> prs, String owner, String repo, boolean verbose) {
-		List<JsonNode> enhancedPRs = new ArrayList<>();
+	private List<AnalyzedPullRequest> enhancePRsWithSoftApproval(List<AnalyzedPullRequest> prs, String owner,
+			String repo, boolean verbose) {
+		List<AnalyzedPullRequest> enhancedPRs = new ArrayList<>();
 		int total = prs.size();
 
 		if (verbose) {
-			logger.info("🔍 Analyzing {} PRs for soft approval detection...", total);
+			logger.info("Analyzing {} PRs for soft approval detection...", total);
 		}
 
 		for (int i = 0; i < prs.size(); i++) {
-			JsonNode pr = prs.get(i);
+			AnalyzedPullRequest pr = prs.get(i);
 			try {
-				int prNumber = jsonUtils.getInt(pr, "number").orElse(-1);
+				int prNumber = pr.number();
 				if (prNumber > 0) {
 					if (verbose) {
-						String prTitle = jsonUtils.getString(pr, "title").orElse("Unknown");
-						logger.info("  📋 Processing PR #{} ({}/{}) - {}", prNumber, i + 1, total,
+						String prTitle = pr.title();
+						logger.info("  Processing PR #{} ({}/{}) - {}", prNumber, i + 1, total,
 								prTitle.length() > 60 ? prTitle.substring(0, 60) + "..." : prTitle);
 					}
 
 					// Get reviews for this PR
-					JsonNode reviewsData = restService.getPullRequestReviews(owner, repo, prNumber);
-					JsonNode enhancedPR = enhancePRWithSoftApproval(pr, reviewsData);
-					enhancedPRs.add(enhancedPR);
+					List<Review> reviews = restService.getPullRequestReviews(owner, repo, prNumber);
 
-					// Check if soft approval was detected
-					if (verbose && enhancedPR.path("soft_approval_detected").asBoolean()) {
-						logger.info("  ✨ Soft approval detected for PR #{}", prNumber);
+					// Analyze for soft approval
+					boolean hasSoftApproval = detectSoftApproval(reviews);
+					String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+					List<SoftApproval> softApprovals = hasSoftApproval ? extractSoftApprovals(reviews) : List.of();
+
+					// Create analyzed PR with reviews
+					AnalyzedPullRequest analyzedPR = new AnalyzedPullRequest(pr.number(), pr.title(), pr.body(),
+							pr.state(), pr.createdAt(), pr.updatedAt(), pr.closedAt(), pr.mergedAt(), pr.url(),
+							pr.htmlUrl(), pr.author(), pr.comments(), pr.labels(), reviews, pr.draft(), pr.merged(),
+							pr.mergeCommitSha(), pr.headRef(), pr.baseRef(), pr.additions(), pr.deletions(),
+							pr.changedFiles(), hasSoftApproval, timestamp, softApprovals);
+
+					enhancedPRs.add(analyzedPR);
+
+					if (verbose && hasSoftApproval) {
+						logger.info("  Soft approval detected for PR #{}", prNumber);
 					}
 				}
 				else {
-					// Add PR without enhancement if number is missing
 					enhancedPRs.add(pr);
 				}
 			}
 			catch (Exception e) {
 				logger.warn("Failed to enhance PR with soft approval detection: {}", e.getMessage());
-				enhancedPRs.add(pr); // Add original PR without enhancement
+				enhancedPRs.add(pr);
 			}
 		}
 
 		if (verbose) {
-			long softApprovalCount = enhancedPRs.stream()
-				.mapToLong(pr -> pr.path("soft_approval_detected").asBoolean() ? 1 : 0)
-				.sum();
-			logger.info("✅ Completed soft approval analysis: {}/{} PRs have soft approvals", softApprovalCount, total);
+			long softApprovalCount = enhancedPRs.stream().filter(AnalyzedPullRequest::softApprovalDetected).count();
+			logger.info("Completed soft approval analysis: {}/{} PRs have soft approvals", softApprovalCount, total);
 		}
 
 		return enhancedPRs;
 	}
 
 	/**
-	 * Detect soft approval in PR reviews Soft approval = approval from non-member
+	 * Detect soft approval in PR reviews. Soft approval = approval from non-member
 	 * (CONTRIBUTOR, FIRST_TIME_CONTRIBUTOR)
 	 */
-	private boolean detectSoftApproval(JsonNode reviewsData) {
-		if (!reviewsData.isArray()) {
-			return false;
-		}
-
-		for (JsonNode review : reviewsData) {
-			String state = jsonUtils.getString(review, "state").orElse("");
-			String authorAssociation = jsonUtils.getString(review, "author_association").orElse("");
-			String authorLogin = jsonUtils.getString(review, "user", "login").orElse("");
-
-			if ("APPROVED".equals(state) && ("CONTRIBUTOR".equals(authorAssociation)
-					|| "FIRST_TIME_CONTRIBUTOR".equals(authorAssociation))) {
+	private boolean detectSoftApproval(List<Review> reviews) {
+		for (Review review : reviews) {
+			if ("APPROVED".equals(review.state()) && ("CONTRIBUTOR".equals(review.authorAssociation())
+					|| "FIRST_TIME_CONTRIBUTOR".equals(review.authorAssociation()))) {
 				return true;
 			}
 		}
@@ -305,33 +259,19 @@ public class PRCollectionService extends BaseCollectionService {
 	}
 
 	/**
-	 * Extract soft approval details for enhanced PR data
+	 * Extract soft approval details
 	 */
-	private Map<String, Object> extractSoftApprovalDetails(JsonNode reviewsData) {
-		Map<String, Object> details = new HashMap<>();
-		List<Map<String, String>> softApprovals = new ArrayList<>();
-
-		if (reviewsData.isArray()) {
-			for (JsonNode review : reviewsData) {
-				String state = jsonUtils.getString(review, "state").orElse("");
-				String authorAssociation = jsonUtils.getString(review, "author_association").orElse("");
-				String authorLogin = jsonUtils.getString(review, "user", "login").orElse("");
-
-				if ("APPROVED".equals(state) && ("CONTRIBUTOR".equals(authorAssociation)
-						|| "FIRST_TIME_CONTRIBUTOR".equals(authorAssociation))) {
-
-					Map<String, String> approval = new HashMap<>();
-					approval.put("reviewer", authorLogin);
-					approval.put("association", authorAssociation);
-					approval.put("submitted_at", jsonUtils.getString(review, "submitted_at").orElse(""));
-					softApprovals.add(approval);
-				}
+	private List<SoftApproval> extractSoftApprovals(List<Review> reviews) {
+		List<SoftApproval> softApprovals = new ArrayList<>();
+		for (Review review : reviews) {
+			if ("APPROVED".equals(review.state()) && ("CONTRIBUTOR".equals(review.authorAssociation())
+					|| "FIRST_TIME_CONTRIBUTOR".equals(review.authorAssociation()))) {
+				String submittedAt = review.submittedAt() != null
+						? review.submittedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : "";
+				softApprovals.add(new SoftApproval(review.author().login(), review.authorAssociation(), submittedAt));
 			}
 		}
-
-		details.put("soft_approvals", softApprovals);
-		details.put("count", softApprovals.size());
-		return details;
+		return softApprovals;
 	}
 
 }

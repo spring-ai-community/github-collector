@@ -11,14 +11,23 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Service for GitHub REST API operations.
+ *
+ * <p>
+ * Converts GitHub API JSON responses to strongly-typed DTOs at the service boundary.
  */
 public class GitHubRestService implements RestService {
 
 	private static final Logger logger = LoggerFactory.getLogger(GitHubRestService.class);
+
+	private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
 	private final GitHub gitHub;
 
@@ -43,18 +52,6 @@ public class GitHubRestService implements RestService {
 	}
 
 	@Override
-	public JsonNode getRepositoryInfo(String owner, String repo) {
-		try {
-			String response = httpClient.get("/repos/" + owner + "/" + repo);
-			return objectMapper.readTree(response);
-		}
-		catch (Exception e) {
-			logger.error("Failed to parse repository info: {}", e.getMessage());
-			return objectMapper.createObjectNode();
-		}
-	}
-
-	@Override
 	public int getTotalIssueCount(String owner, String repo, String state) {
 		try {
 			String query = String.format("repo:%s/%s is:issue is:%s", owner, repo, state);
@@ -70,93 +67,6 @@ public class GitHubRestService implements RestService {
 		}
 	}
 
-	/**
-	 * Build search query string for GitHub API (backward compatible)
-	 * @param owner Repository owner
-	 * @param repo Repository name
-	 * @param state Issue state (open/closed/all)
-	 * @param labels List of labels to filter by
-	 * @param labelMode Label matching mode (any/all)
-	 * @return Formatted search query string
-	 */
-	@Override
-	public String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode) {
-		return buildSearchQuery(owner, repo, state, labels, labelMode, null, null, null);
-	}
-
-	/**
-	 * Build search query string for GitHub API with dashboard enhancements
-	 * @param owner Repository owner
-	 * @param repo Repository name
-	 * @param state Issue state (open/closed/all)
-	 * @param labels List of labels to filter by
-	 * @param labelMode Label matching mode (any/all)
-	 * @param sortBy Sort field (updated/created/comments/reactions)
-	 * @param sortOrder Sort direction (desc/asc)
-	 * @param maxIssues Maximum number of issues to collect (null for unlimited)
-	 * @return Formatted search query string
-	 */
-	@Override
-	public String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode,
-			String sortBy, String sortOrder, Integer maxIssues) {
-		StringBuilder query = new StringBuilder();
-		query.append("repo:").append(owner).append("/").append(repo);
-		query.append(" is:issue");
-
-		if (!"all".equals(state)) {
-			query.append(" is:").append(state);
-		}
-
-		if (labels != null && !labels.isEmpty()) {
-			if ("all".equals(labelMode)) {
-				// For "all" mode, add each label requirement
-				for (String label : labels) {
-					query.append(" label:\"").append(label).append("\"");
-				}
-			}
-			else {
-				// For "any" mode, use first label only due to GitHub API limitations
-				query.append(" label:\"").append(labels.get(0)).append("\"");
-				if (labels.size() > 1) {
-					logger.warn(
-							"Label mode 'any' with multiple labels - using first label only due to GitHub API limitations");
-				}
-			}
-		}
-
-		return query.toString();
-	}
-
-	/**
-	 * Execute GitHub search with sorting and pagination support
-	 * @param searchQuery The formatted search query string
-	 * @param sortBy Sort field (updated/created/comments/reactions)
-	 * @param sortOrder Sort direction (desc/asc)
-	 * @param perPage Number of issues per page (max 100)
-	 * @param page Page number (1-based)
-	 * @return JsonNode containing search results
-	 */
-	@Override
-	public JsonNode searchIssues(String searchQuery, String sortBy, String sortOrder, int perPage, int page) {
-		try {
-			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
-			String url = String.format("/search/issues?q=%s&sort=%s&order=%s&per_page=%d&page=%d", encodedQuery, sortBy,
-					sortOrder, perPage, page);
-			String response = httpClient.get(url);
-
-			return objectMapper.readTree(response);
-		}
-		catch (Exception e) {
-			logger.error("Failed to search issues: {}", e.getMessage());
-			return objectMapper.createObjectNode();
-		}
-	}
-
-	/**
-	 * Get total issue count with search parameters
-	 * @param searchQuery The formatted search query string
-	 * @return Total number of issues matching the query
-	 */
 	@Override
 	public int getTotalIssueCount(String searchQuery) {
 		try {
@@ -172,49 +82,60 @@ public class GitHubRestService implements RestService {
 		}
 	}
 
-	/**
-	 * Get specific pull request by number
-	 * @param owner Repository owner
-	 * @param repo Repository name
-	 * @param prNumber PR number
-	 * @return PR data as JsonNode
-	 */
 	@Override
-	public JsonNode getPullRequest(String owner, String repo, int prNumber) {
+	public String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode) {
+		StringBuilder query = new StringBuilder();
+		query.append("repo:").append(owner).append("/").append(repo);
+		query.append(" is:issue");
+
+		if (!"all".equals(state)) {
+			query.append(" is:").append(state);
+		}
+
+		if (labels != null && !labels.isEmpty()) {
+			if ("all".equals(labelMode)) {
+				for (String label : labels) {
+					query.append(" label:\"").append(label).append("\"");
+				}
+			}
+			else {
+				query.append(" label:\"").append(labels.get(0)).append("\"");
+				if (labels.size() > 1) {
+					logger.warn(
+							"Label mode 'any' with multiple labels - using first label only due to GitHub API limitations");
+				}
+			}
+		}
+
+		return query.toString();
+	}
+
+	@Override
+	public PullRequest getPullRequest(String owner, String repo, int prNumber) {
 		try {
 			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber);
-			return objectMapper.readTree(response);
+			JsonNode node = objectMapper.readTree(response);
+			return parsePullRequest(node);
 		}
 		catch (Exception e) {
 			logger.error("Failed to get PR {}: {}", prNumber, e.getMessage());
-			return objectMapper.createObjectNode();
+			throw new RuntimeException("Failed to get PR #" + prNumber, e);
 		}
 	}
 
-	/**
-	 * Get reviews for a specific pull request
-	 * @param owner Repository owner
-	 * @param repo Repository name
-	 * @param prNumber PR number
-	 * @return Reviews data as JsonNode
-	 */
 	@Override
-	public JsonNode getPullRequestReviews(String owner, String repo, int prNumber) {
+	public List<Review> getPullRequestReviews(String owner, String repo, int prNumber) {
 		try {
 			String response = httpClient.get("/repos/" + owner + "/" + repo + "/pulls/" + prNumber + "/reviews");
-			return objectMapper.readTree(response);
+			JsonNode nodes = objectMapper.readTree(response);
+			return parseReviews(nodes);
 		}
 		catch (Exception e) {
 			logger.error("Failed to get reviews for PR {}: {}", prNumber, e.getMessage());
-			return objectMapper.createArrayNode();
+			return List.of();
 		}
 	}
 
-	/**
-	 * Get total PR count with search parameters
-	 * @param searchQuery The formatted search query string
-	 * @return Total number of PRs matching the query
-	 */
 	@Override
 	public int getTotalPRCount(String searchQuery) {
 		try {
@@ -230,21 +151,12 @@ public class GitHubRestService implements RestService {
 		}
 	}
 
-	/**
-	 * Build GitHub search query for pull requests
-	 * @param repository Repository in format "owner/repo"
-	 * @param prState PR state (open, closed, merged, all)
-	 * @param labelFilters Optional label filters
-	 * @param labelMode Label matching mode (any, all)
-	 * @return Formatted search query
-	 */
 	@Override
 	public String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode) {
 		StringBuilder query = new StringBuilder();
 		query.append("repo:").append(repository);
 		query.append(" is:pr");
 
-		// Add state filter
 		if (!"all".equals(prState)) {
 			if ("merged".equals(prState)) {
 				query.append(" is:merged");
@@ -254,12 +166,8 @@ public class GitHubRestService implements RestService {
 			}
 		}
 
-		// Add label filters
 		if (labelFilters != null && !labelFilters.isEmpty()) {
 			if ("any".equals(labelMode)) {
-				// GitHub API limitation: can only search for one label at a time with OR
-				// logic
-				// Use first label only and warn user
 				if (labelFilters.size() > 1) {
 					logger.warn(
 							"Label mode 'any' with multiple labels - using first label only due to GitHub API limitations");
@@ -267,7 +175,6 @@ public class GitHubRestService implements RestService {
 				query.append(" label:\"").append(labelFilters.get(0)).append("\"");
 			}
 			else {
-				// "all" mode - add each label (AND logic)
 				for (String label : labelFilters) {
 					query.append(" label:\"").append(label).append("\"");
 				}
@@ -277,18 +184,9 @@ public class GitHubRestService implements RestService {
 		return query.toString();
 	}
 
-	/**
-	 * Search for pull requests using GitHub Search API
-	 * @param searchQuery The formatted search query string
-	 * @param batchSize Number of PRs to return per batch
-	 * @param cursor Pagination cursor (for this REST API implementation, we'll use page
-	 * numbers)
-	 * @return JSON response containing PR search results
-	 */
 	@Override
-	public JsonNode searchPRs(String searchQuery, int batchSize, String cursor) {
+	public SearchResult<PullRequest> searchPRs(String searchQuery, int batchSize, String cursor) {
 		try {
-			// For REST API, we'll use simple pagination instead of cursor
 			int page = 1;
 			if (cursor != null && !cursor.isEmpty()) {
 				try {
@@ -303,11 +201,154 @@ public class GitHubRestService implements RestService {
 			String url = String.format("/search/issues?q=%s&per_page=%d&page=%d", encodedQuery, batchSize, page);
 			String response = httpClient.get(url);
 
-			return objectMapper.readTree(response);
+			JsonNode searchResult = objectMapper.readTree(response);
+
+			// Parse PRs from items
+			List<PullRequest> prs = new ArrayList<>();
+			JsonNode items = searchResult.path("items");
+			if (items.isArray()) {
+				for (JsonNode item : items) {
+					PullRequest pr = parsePullRequestFromSearch(item);
+					if (pr != null) {
+						prs.add(pr);
+					}
+				}
+			}
+
+			// Determine pagination - if we got fewer than requested, no more pages
+			boolean hasMore = prs.size() >= batchSize;
+			String nextCursor = hasMore ? String.valueOf(page + 1) : null;
+
+			return new SearchResult<>(prs, nextCursor, hasMore);
 		}
 		catch (Exception e) {
 			logger.error("Failed to search PRs: {}", e.getMessage());
-			return objectMapper.createObjectNode();
+			return SearchResult.empty();
+		}
+	}
+
+	// ========== JSON Parsing Methods ==========
+
+	private PullRequest parsePullRequest(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			return new PullRequest(node.path("number").asInt(), node.path("title").asText(""),
+					node.path("body").asText(null), node.path("state").asText(""),
+					parseDateTime(node.path("created_at").asText(null)),
+					parseDateTime(node.path("updated_at").asText(null)),
+					parseDateTime(node.path("closed_at").asText(null)),
+					parseDateTime(node.path("merged_at").asText(null)), node.path("url").asText(""),
+					node.path("html_url").asText(""), parseAuthor(node.path("user")), List.of(), // Comments
+																									// not
+																									// included
+																									// in
+																									// PR
+																									// endpoint
+					parseLabels(node.path("labels")), List.of(), // Reviews fetched
+																	// separately
+					node.path("draft").asBoolean(false), node.path("merged").asBoolean(false),
+					node.path("merge_commit_sha").asText(null), node.path("head").path("ref").asText(null),
+					node.path("base").path("ref").asText(null), node.path("additions").asInt(0),
+					node.path("deletions").asInt(0), node.path("changed_files").asInt(0));
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse PR: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	private PullRequest parsePullRequestFromSearch(JsonNode node) {
+		// Search API returns different structure than PR endpoint
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			return new PullRequest(node.path("number").asInt(), node.path("title").asText(""),
+					node.path("body").asText(null), node.path("state").asText(""),
+					parseDateTime(node.path("created_at").asText(null)),
+					parseDateTime(node.path("updated_at").asText(null)),
+					parseDateTime(node.path("closed_at").asText(null)), null, // merged_at
+																				// not in
+																				// search
+																				// results
+					node.path("url").asText(""), node.path("html_url").asText(""), parseAuthor(node.path("user")),
+					List.of(), parseLabels(node.path("labels")), List.of(), // Reviews
+																			// fetched
+																			// separately
+					node.path("draft").asBoolean(false), false, // merged not reliably in
+																// search
+					null, // merge_commit_sha not in search
+					null, null, // head/base refs not in search
+					0, 0, 0 // additions/deletions/changed_files not in search
+			);
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse PR from search: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	private List<Review> parseReviews(JsonNode nodes) {
+		List<Review> reviews = new ArrayList<>();
+		if (nodes != null && nodes.isArray()) {
+			for (JsonNode node : nodes) {
+				Review review = parseReview(node);
+				if (review != null) {
+					reviews.add(review);
+				}
+			}
+		}
+		return reviews;
+	}
+
+	private Review parseReview(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			return new Review(node.path("id").asLong(), node.path("body").asText(""), node.path("state").asText(""),
+					parseDateTime(node.path("submitted_at").asText(null)), parseAuthor(node.path("user")),
+					node.path("author_association").asText(""), node.path("html_url").asText(""));
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse review: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	private Author parseAuthor(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return new Author("unknown", null);
+		}
+		return new Author(node.path("login").asText("unknown"), node.path("name").asText(null));
+	}
+
+	private List<Label> parseLabels(JsonNode nodes) {
+		List<Label> labels = new ArrayList<>();
+		if (nodes != null && nodes.isArray()) {
+			for (JsonNode node : nodes) {
+				labels.add(new Label(node.path("name").asText(""), node.path("color").asText(null),
+						node.path("description").asText(null)));
+			}
+		}
+		return labels;
+	}
+
+	private LocalDateTime parseDateTime(String dateTimeStr) {
+		if (dateTimeStr == null || dateTimeStr.isEmpty()) {
+			return null;
+		}
+		try {
+			return LocalDateTime.parse(dateTimeStr, ISO_FORMATTER);
+		}
+		catch (DateTimeParseException e) {
+			logger.warn("Failed to parse datetime: {}", dateTimeStr);
+			return null;
 		}
 	}
 

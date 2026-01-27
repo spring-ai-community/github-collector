@@ -56,7 +56,7 @@ public class GitHubCollectorBuilder {
 
 	private ArchiveService archiveService;
 
-	private BatchStrategy batchStrategy;
+	private BatchStrategy<?> batchStrategy;
 
 	private GitHubCollectorBuilder() {
 		this.properties = new CollectionProperties();
@@ -156,7 +156,7 @@ public class GitHubCollectorBuilder {
 	 * @param batchStrategy custom BatchStrategy implementation
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder batchStrategy(BatchStrategy batchStrategy) {
+	public GitHubCollectorBuilder batchStrategy(BatchStrategy<?> batchStrategy) {
 		this.batchStrategy = batchStrategy;
 		return this;
 	}
@@ -165,24 +165,26 @@ public class GitHubCollectorBuilder {
 	 * Build an IssueCollectionService.
 	 * @return configured IssueCollectionService
 	 */
+	@SuppressWarnings("unchecked")
 	public IssueCollectionService buildIssueCollector() {
 		validateToken();
 		Components components = buildComponents();
-		return new IssueCollectionService(components.graphQLService, components.restService, components.jsonNodeUtils,
-				components.objectMapper, properties, components.stateRepository, components.archiveService,
-				components.batchStrategy);
+		return new IssueCollectionService(components.graphQLService, components.restService, components.objectMapper,
+				properties, components.stateRepository, components.archiveService,
+				(BatchStrategy<Issue>) components.batchStrategy);
 	}
 
 	/**
 	 * Build a PRCollectionService.
 	 * @return configured PRCollectionService
 	 */
+	@SuppressWarnings("unchecked")
 	public PRCollectionService buildPRCollector() {
 		validateToken();
 		Components components = buildComponents();
-		return new PRCollectionService(components.graphQLService, components.restService, components.jsonNodeUtils,
-				components.objectMapper, properties, components.stateRepository, components.archiveService,
-				components.batchStrategy);
+		return new PRCollectionService(components.graphQLService, components.restService, components.objectMapper,
+				properties, components.stateRepository, components.archiveService,
+				(BatchStrategy<AnalyzedPullRequest>) components.batchStrategy);
 	}
 
 	/**
@@ -220,13 +222,12 @@ public class GitHubCollectorBuilder {
 		CollectionStateRepository repository = this.stateRepository != null ? this.stateRepository
 				: new FileSystemStateRepository(mapper);
 		ArchiveService archive = this.archiveService != null ? this.archiveService : new ZipArchiveService();
-		BatchStrategy batch = this.batchStrategy != null ? this.batchStrategy : new FixedBatchStrategy();
+		BatchStrategy<?> batch = this.batchStrategy != null ? this.batchStrategy : new FixedBatchStrategy<>();
 
 		GitHubRestService restService = new GitHubRestService(gitHub, client, mapper);
 		GitHubGraphQLService graphQLService = new GitHubGraphQLService(client, mapper);
-		JsonNodeUtils jsonNodeUtils = new JsonNodeUtils();
 
-		return new Components(restService, graphQLService, jsonNodeUtils, mapper, repository, archive, batch);
+		return new Components(restService, graphQLService, mapper, repository, archive, batch);
 	}
 
 	private ObjectMapper createDefaultObjectMapper() {
@@ -247,9 +248,8 @@ public class GitHubCollectorBuilder {
 	/**
 	 * Internal record to hold built components.
 	 */
-	private record Components(RestService restService, GraphQLService graphQLService, JsonNodeUtils jsonNodeUtils,
-			ObjectMapper objectMapper, CollectionStateRepository stateRepository, ArchiveService archiveService,
-			BatchStrategy batchStrategy) {
+	private record Components(RestService restService, GraphQLService graphQLService, ObjectMapper objectMapper,
+			CollectionStateRepository stateRepository, ArchiveService archiveService, BatchStrategy<?> batchStrategy) {
 	}
 
 }

@@ -1,6 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -17,9 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -84,34 +81,6 @@ class GitHubServicesTest {
 
 			assertThat(result).isEqualTo(mockRepository);
 			verify(mockGitHub).getRepository("spring-projects/spring-ai");
-		}
-
-		@Test
-		@DisplayName("Should get repository info via REST API")
-		void shouldGetRepositoryInfoViaRestAPI() {
-			String mockResponse = "{\"name\":\"spring-ai\",\"full_name\":\"spring-projects/spring-ai\"}";
-
-			when(mockHttpClient.get(anyString())).thenReturn(mockResponse);
-
-			JsonNode result = gitHubRestService.getRepositoryInfo("spring-projects", "spring-ai");
-
-			assertThat(result).isNotNull();
-			assertThat(result.path("name").asText()).isEqualTo("spring-ai");
-			assertThat(result.path("full_name").asText()).isEqualTo("spring-projects/spring-ai");
-		}
-
-		@Test
-		@DisplayName("Should handle repository info parsing errors gracefully")
-		void shouldHandleRepositoryInfoParsingErrorsGracefully() {
-			String invalidResponse = "invalid json";
-
-			when(mockHttpClient.get(anyString())).thenReturn(invalidResponse);
-
-			JsonNode result = gitHubRestService.getRepositoryInfo("spring-projects", "spring-ai");
-
-			assertThat(result).isNotNull();
-			assertThat(result.isObject()).isTrue();
-			assertThat(result.size()).isEqualTo(0); // Empty object node
 		}
 
 		@Test
@@ -231,15 +200,35 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should get pull request by number")
 			void shouldGetPullRequestByNumber() {
-				String mockResponse = "{\"number\":123,\"title\":\"Fix bug\",\"state\":\"open\"}";
+				String mockResponse = """
+						{
+						    "number": 123,
+						    "title": "Fix bug",
+						    "state": "open",
+						    "body": "This fixes the bug",
+						    "created_at": "2024-01-15T10:30:00Z",
+						    "updated_at": "2024-01-16T11:00:00Z",
+						    "url": "https://api.github.com/repos/owner/repo/pulls/123",
+						    "html_url": "https://github.com/owner/repo/pull/123",
+						    "user": {"login": "author"},
+						    "labels": [],
+						    "draft": false,
+						    "merged": false,
+						    "head": {"ref": "feature"},
+						    "base": {"ref": "main"},
+						    "additions": 10,
+						    "deletions": 5,
+						    "changed_files": 2
+						}
+						""";
 				when(mockHttpClient.get("/repos/owner/repo/pulls/123")).thenReturn(mockResponse);
 
-				JsonNode result = gitHubRestService.getPullRequest("owner", "repo", 123);
+				PullRequest result = gitHubRestService.getPullRequest("owner", "repo", 123);
 
 				assertThat(result).isNotNull();
-				assertThat(result.path("number").asInt()).isEqualTo(123);
-				assertThat(result.path("title").asText()).isEqualTo("Fix bug");
-				assertThat(result.path("state").asText()).isEqualTo("open");
+				assertThat(result.number()).isEqualTo(123);
+				assertThat(result.title()).isEqualTo("Fix bug");
+				assertThat(result.state()).isEqualTo("open");
 			}
 
 			@Test
@@ -247,25 +236,35 @@ class GitHubServicesTest {
 			void shouldHandleGetPullRequestErrorGracefully() {
 				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("PR not found"));
 
-				JsonNode result = gitHubRestService.getPullRequest("owner", "repo", 999);
-
-				assertThat(result).isNotNull();
-				assertThat(result.isObject()).isTrue();
-				assertThat(result.size()).isEqualTo(0);
+				assertThatThrownBy(() -> gitHubRestService.getPullRequest("owner", "repo", 999))
+					.isInstanceOf(RuntimeException.class)
+					.hasMessageContaining("Failed to get PR #999");
 			}
 
 			@Test
 			@DisplayName("Should get pull request reviews")
 			void shouldGetPullRequestReviews() {
-				String mockResponse = "[{\"id\":1,\"state\":\"APPROVED\",\"user\":{\"login\":\"reviewer\"}}]";
+				String mockResponse = """
+						[
+						    {
+						        "id": 1,
+						        "body": "LGTM",
+						        "state": "APPROVED",
+						        "submitted_at": "2024-01-15T12:00:00Z",
+						        "user": {"login": "reviewer"},
+						        "author_association": "MEMBER",
+						        "html_url": "https://github.com/owner/repo/pull/123#pullrequestreview-1"
+						    }
+						]
+						""";
 				when(mockHttpClient.get("/repos/owner/repo/pulls/123/reviews")).thenReturn(mockResponse);
 
-				JsonNode result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
+				List<Review> result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
 
 				assertThat(result).isNotNull();
-				assertThat(result.isArray()).isTrue();
-				assertThat(result.size()).isEqualTo(1);
-				assertThat(result.get(0).path("state").asText()).isEqualTo("APPROVED");
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).state()).isEqualTo("APPROVED");
+				assertThat(result.get(0).author().login()).isEqualTo("reviewer");
 			}
 
 			@Test
@@ -273,11 +272,10 @@ class GitHubServicesTest {
 			void shouldHandleGetReviewsErrorGracefully() {
 				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
 
-				JsonNode result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
+				List<Review> result = gitHubRestService.getPullRequestReviews("owner", "repo", 123);
 
 				assertThat(result).isNotNull();
-				assertThat(result.isArray()).isTrue();
-				assertThat(result.size()).isEqualTo(0);
+				assertThat(result).isEmpty();
 			}
 
 			@Test
@@ -304,23 +302,59 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should search PRs with pagination")
 			void shouldSearchPRsWithPagination() {
-				String mockResponse = "{\"total_count\":100,\"items\":[{\"number\":1},{\"number\":2}]}";
+				String mockResponse = """
+						{
+						    "total_count": 100,
+						    "items": [
+						        {
+						            "number": 1,
+						            "title": "PR 1",
+						            "state": "open",
+						            "created_at": "2024-01-15T10:00:00Z",
+						            "updated_at": "2024-01-16T10:00:00Z",
+						            "url": "https://api.github.com/repos/owner/repo/pulls/1",
+						            "html_url": "https://github.com/owner/repo/pull/1",
+						            "user": {"login": "author1"},
+						            "labels": [],
+						            "draft": false
+						        },
+						        {
+						            "number": 2,
+						            "title": "PR 2",
+						            "state": "open",
+						            "created_at": "2024-01-15T11:00:00Z",
+						            "updated_at": "2024-01-16T11:00:00Z",
+						            "url": "https://api.github.com/repos/owner/repo/pulls/2",
+						            "html_url": "https://github.com/owner/repo/pull/2",
+						            "user": {"login": "author2"},
+						            "labels": [],
+						            "draft": false
+						        }
+						    ]
+						}
+						""";
 				when(mockHttpClient.get(contains("/search/issues"))).thenReturn(mockResponse);
 
-				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
+				SearchResult<PullRequest> result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
 
 				assertThat(result).isNotNull();
-				assertThat(result.path("total_count").asInt()).isEqualTo(100);
-				assertThat(result.path("items").size()).isEqualTo(2);
+				assertThat(result.items()).hasSize(2);
+				assertThat(result.items().get(0).number()).isEqualTo(1);
+				assertThat(result.items().get(1).number()).isEqualTo(2);
 			}
 
 			@Test
 			@DisplayName("Should search PRs with cursor/page number")
 			void shouldSearchPRsWithCursor() {
-				String mockResponse = "{\"total_count\":100,\"items\":[{\"number\":31}]}";
+				String mockResponse = """
+						{
+						    "total_count": 100,
+						    "items": [{"number": 31, "title": "PR", "state": "open", "created_at": "2024-01-15T10:00:00Z", "updated_at": "2024-01-16T10:00:00Z", "url": "", "html_url": "", "user": {"login": "author"}, "labels": [], "draft": false}]
+						}
+						""";
 				when(mockHttpClient.get(contains("page=2"))).thenReturn(mockResponse);
 
-				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "2");
+				SearchResult<PullRequest> result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "2");
 
 				assertThat(result).isNotNull();
 				verify(mockHttpClient).get(contains("page=2"));
@@ -333,7 +367,7 @@ class GitHubServicesTest {
 				when(mockHttpClient.get(anyString())).thenReturn(mockResponse);
 
 				// Invalid cursor should default to page 1
-				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "invalid");
+				SearchResult<PullRequest> result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, "invalid");
 
 				assertThat(result).isNotNull();
 				verify(mockHttpClient).get(contains("page=1"));
@@ -344,11 +378,11 @@ class GitHubServicesTest {
 			void shouldHandleSearchPRsErrorGracefully() {
 				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("Search failed"));
 
-				JsonNode result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
+				SearchResult<PullRequest> result = gitHubRestService.searchPRs("repo:owner/repo is:pr", 30, null);
 
 				assertThat(result).isNotNull();
-				assertThat(result.isObject()).isTrue();
-				assertThat(result.size()).isEqualTo(0);
+				assertThat(result.items()).isEmpty();
+				assertThat(result.hasMore()).isFalse();
 			}
 
 		}
@@ -453,35 +487,6 @@ class GitHubServicesTest {
 		}
 
 		@Test
-		@DisplayName("Should execute GraphQL query successfully")
-		void shouldExecuteGraphQLQuerySuccessfully() {
-			String mockResponse = "{\"data\":{\"repository\":{\"name\":\"spring-ai\"}}}";
-			String testQuery = "query { repository(owner: \"spring-projects\", name: \"spring-ai\") { name } }";
-			Object testVariables = null;
-
-			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(mockResponse);
-
-			JsonNode result = gitHubGraphQLService.executeQuery(testQuery, testVariables);
-
-			assertThat(result).isNotNull();
-			assertThat(result.path("data").path("repository").path("name").asText()).isEqualTo("spring-ai");
-		}
-
-		@Test
-		@DisplayName("Should handle GraphQL query errors gracefully")
-		void shouldHandleGraphQLQueryErrorsGracefully() {
-			String testQuery = "invalid query";
-
-			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenThrow(new RuntimeException("GraphQL Error"));
-
-			JsonNode result = gitHubGraphQLService.executeQuery(testQuery, null);
-
-			assertThat(result).isNotNull();
-			assertThat(result.isObject()).isTrue();
-			assertThat(result.size()).isEqualTo(0); // Empty object node
-		}
-
-		@Test
 		@DisplayName("Should get total issue count via GraphQL")
 		void shouldGetTotalIssueCountViaGraphQL() {
 			String mockResponse = "{\"data\":{\"repository\":{\"issues\":{\"totalCount\":2500}}}}";
@@ -525,147 +530,6 @@ class GitHubServicesTest {
 	}
 
 	@Nested
-	@DisplayName("JsonNodeUtils Tests")
-	class JsonNodeUtilsTest {
-
-		private JsonNodeUtils jsonNodeUtils;
-
-		private JsonNode testNode;
-
-		@BeforeEach
-		void setUp() throws Exception {
-			jsonNodeUtils = new JsonNodeUtils();
-
-			// Create a test JSON structure
-			String testJson = """
-					{
-					    "user": {
-					        "name": "John Doe",
-					        "age": 30,
-					        "email": "john@example.com",
-					        "created_at": "2023-01-15T10:30:00"
-					    },
-					    "issues": [
-					        {"title": "Bug fix", "number": 1},
-					        {"title": "Feature request", "number": 2}
-					    ],
-					    "empty_array": [],
-					    "missing_field": null
-					}
-					""";
-
-			testNode = realObjectMapper.readTree(testJson);
-		}
-
-		@Test
-		@DisplayName("Should get string value from valid path")
-		void shouldGetStringValueFromValidPath() {
-			Optional<String> result = jsonNodeUtils.getString(testNode, "user", "name");
-
-			assertThat(result).isPresent();
-			assertThat(result.get()).isEqualTo("John Doe");
-		}
-
-		@Test
-		@DisplayName("Should return empty for missing string path")
-		void shouldReturnEmptyForMissingStringPath() {
-			Optional<String> result = jsonNodeUtils.getString(testNode, "user", "nonexistent");
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should get integer value from valid path")
-		void shouldGetIntegerValueFromValidPath() {
-			Optional<Integer> result = jsonNodeUtils.getInt(testNode, "user", "age");
-
-			assertThat(result).isPresent();
-			assertThat(result.get()).isEqualTo(30);
-		}
-
-		@Test
-		@DisplayName("Should return empty for missing integer path")
-		void shouldReturnEmptyForMissingIntegerPath() {
-			Optional<Integer> result = jsonNodeUtils.getInt(testNode, "user", "nonexistent");
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should get datetime value from valid path")
-		void shouldGetDatetimeValueFromValidPath() {
-			Optional<LocalDateTime> result = jsonNodeUtils.getDateTime(testNode, "user", "created_at");
-
-			assertThat(result).isPresent();
-			assertThat(result.get()).isEqualTo(LocalDateTime.of(2023, 1, 15, 10, 30, 0));
-		}
-
-		@Test
-		@DisplayName("Should return empty for invalid datetime format")
-		void shouldReturnEmptyForInvalidDatetimeFormat() {
-			Optional<LocalDateTime> result = jsonNodeUtils.getDateTime(testNode, "user", "name"); // Name
-																									// is
-																									// not
-																									// a
-																									// datetime
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should get array values from valid path")
-		void shouldGetArrayValuesFromValidPath() {
-			List<JsonNode> result = jsonNodeUtils.getArray(testNode, "issues");
-
-			assertThat(result).hasSize(2);
-			assertThat(result.get(0).path("title").asText()).isEqualTo("Bug fix");
-			assertThat(result.get(1).path("title").asText()).isEqualTo("Feature request");
-		}
-
-		@Test
-		@DisplayName("Should return empty list for non-array path")
-		void shouldReturnEmptyListForNonArrayPath() {
-			List<JsonNode> result = jsonNodeUtils.getArray(testNode, "user", "name");
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should return empty list for missing array path")
-		void shouldReturnEmptyListForMissingArrayPath() {
-			List<JsonNode> result = jsonNodeUtils.getArray(testNode, "nonexistent");
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should handle empty array correctly")
-		void shouldHandleEmptyArrayCorrectly() {
-			List<JsonNode> result = jsonNodeUtils.getArray(testNode, "empty_array");
-
-			assertThat(result).isEmpty();
-		}
-
-		@Test
-		@DisplayName("Should handle nested path navigation")
-		void shouldHandleNestedPathNavigation() {
-			Optional<String> result = jsonNodeUtils.getString(testNode, "user", "email");
-
-			assertThat(result).isPresent();
-			assertThat(result.get()).isEqualTo("john@example.com");
-		}
-
-		@Test
-		@DisplayName("Should handle deep path navigation with missing intermediate nodes")
-		void shouldHandleDeepPathNavigationWithMissingIntermediateNodes() {
-			Optional<String> result = jsonNodeUtils.getString(testNode, "nonexistent", "deep", "path");
-
-			assertThat(result).isEmpty();
-		}
-
-	}
-
-	@Nested
 	@DisplayName("Component Tests - Service Construction")
 	class ComponentTest {
 
@@ -677,28 +541,12 @@ class GitHubServicesTest {
 
 			GitHubRestService restService = new GitHubRestService(mockGitHub, mockHttpClient, realObjectMapper);
 			GitHubGraphQLService graphQLService = new GitHubGraphQLService(mockGraphQLHttpClient, realObjectMapper);
-			JsonNodeUtils jsonUtils = new JsonNodeUtils();
 
 			assertThat(restService).isNotNull();
 			assertThat(graphQLService).isNotNull();
-			assertThat(jsonUtils).isNotNull();
 
 			// Verify that creating these services doesn't trigger any external calls
 			verifyNoInteractions(mockGitHub, mockHttpClient, mockGraphQLHttpClient);
-		}
-
-		@Test
-		@DisplayName("All services should handle errors gracefully without throwing exceptions")
-		void allServicesShouldHandleErrorsGracefullyWithoutThrowingExceptions() {
-			JsonNodeUtils jsonUtils = new JsonNodeUtils();
-
-			// Test that JsonNodeUtils handles missing fields gracefully
-			assertThatCode(() -> {
-				jsonUtils.getString(realObjectMapper.createObjectNode(), "nonexistent");
-				jsonUtils.getInt(realObjectMapper.createObjectNode(), "nonexistent");
-				jsonUtils.getDateTime(realObjectMapper.createObjectNode(), "nonexistent");
-				jsonUtils.getArray(realObjectMapper.createObjectNode(), "nonexistent");
-			}).doesNotThrowAnyException();
 		}
 
 	}

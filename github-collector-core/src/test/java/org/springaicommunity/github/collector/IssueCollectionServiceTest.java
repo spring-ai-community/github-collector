@@ -1,6 +1,5 @@
 package org.springaicommunity.github.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,8 +43,6 @@ class IssueCollectionServiceTest {
 	@Mock
 	private RestService mockRestService;
 
-	private JsonNodeUtils realJsonUtils;
-
 	private CollectionProperties realProperties;
 
 	@Mock
@@ -55,7 +52,7 @@ class IssueCollectionServiceTest {
 	private ArchiveService mockArchiveService;
 
 	@Mock
-	private BatchStrategy mockBatchStrategy;
+	private BatchStrategy<Issue> mockBatchStrategy;
 
 	private ObjectMapper realObjectMapper;
 
@@ -68,7 +65,6 @@ class IssueCollectionServiceTest {
 	void setUp() {
 		realObjectMapper = new ObjectMapper();
 		realObjectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-		realJsonUtils = new JsonNodeUtils();
 
 		// Setup real properties with safe defaults
 		realProperties = new CollectionProperties();
@@ -79,8 +75,8 @@ class IssueCollectionServiceTest {
 		realProperties.setMaxRetries(3);
 		realProperties.setRetryDelay(1);
 
-		collectionService = new IssueCollectionService(mockGraphQLService, mockRestService, realJsonUtils,
-				realObjectMapper, realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy);
+		collectionService = new IssueCollectionService(mockGraphQLService, mockRestService, realObjectMapper,
+				realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy);
 	}
 
 	@Nested
@@ -370,8 +366,8 @@ class IssueCollectionServiceTest {
 		@DisplayName("Should validate all required dependencies are available")
 		void shouldValidateAllRequiredDependenciesAreAvailable() {
 			// Test that service can be constructed with all valid dependencies
-			assertThatCode(() -> new IssueCollectionService(mockGraphQLService, mockRestService, realJsonUtils,
-					realObjectMapper, realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy))
+			assertThatCode(() -> new IssueCollectionService(mockGraphQLService, mockRestService, realObjectMapper,
+					realProperties, mockStateRepository, mockArchiveService, mockBatchStrategy))
 				.doesNotThrowAnyException();
 
 			// Service should be able to handle operations with properly injected
