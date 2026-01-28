@@ -50,6 +50,11 @@ public class ParsedConfiguration {
 
 	public String prState; // open/closed/all for PR filtering
 
+	// Output options (single-file mode)
+	public boolean singleFile = false; // output all results to a single JSON file
+
+	public String outputFile = null; // custom output file path
+
 	public ParsedConfiguration(CollectionProperties defaultProperties) {
 		// Initialize with defaults
 		this.repository = defaultProperties.getDefaultRepository();
@@ -76,7 +81,8 @@ public class ParsedConfiguration {
 				+ ", resume=" + resume + ", helpRequested=" + helpRequested + ", issueState='" + issueState + '\''
 				+ ", labelFilters=" + labelFilters + ", labelMode='" + labelMode + '\'' + ", maxIssues=" + maxIssues
 				+ ", sortBy='" + sortBy + '\'' + ", sortOrder='" + sortOrder + '\'' + ", collectionType='"
-				+ collectionType + '\'' + ", prNumber=" + prNumber + ", prState='" + prState + '\'' + '}';
+				+ collectionType + '\'' + ", prNumber=" + prNumber + ", prState='" + prState + '\'' + ", singleFile="
+				+ singleFile + ", outputFile='" + outputFile + '\'' + '}';
 	}
 
 }

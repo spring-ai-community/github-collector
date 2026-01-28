@@ -102,6 +102,9 @@ public abstract class BaseCollectionService<T> {
 	 */
 	protected CollectionResult collectItemsInBatches(String owner, String repo, CollectionRequest request,
 			Path outputDir, String searchQuery, int totalAvailableItems) throws Exception {
+		// Configure single-file mode if requested
+		stateRepository.configureSingleFileMode(request.singleFile(), request.outputFile());
+
 		List<String> batchFiles = new ArrayList<>();
 		String cursor = null;
 		int batchNum = 1;
@@ -172,6 +175,13 @@ public abstract class BaseCollectionService<T> {
 					getItemTypeName(), processedCount.get(), isDashboardMode ? effectiveTotal : totalAvailableItems);
 		}
 
+		// Finalize single-file mode (writes accumulated data if applicable)
+		String singleFileOutput = stateRepository.finalizeCollection(outputDir, getCollectionType(), request.dryRun());
+		if (singleFileOutput != null) {
+			batchFiles.clear();
+			batchFiles.add(singleFileOutput);
+		}
+
 		// Create ZIP if requested
 		createZipFile(outputDir, batchFiles, request);
 
@@ -180,7 +190,8 @@ public abstract class BaseCollectionService<T> {
 		logger.info("{} collection completed: {}/{} {} processed", capitalizedTypeName, processedCount.get(),
 				totalAvailableItems, itemTypeName);
 
-		return new CollectionResult(totalAvailableItems, processedCount.get(), outputDir.toString(), batchFiles);
+		return new CollectionResult(totalAvailableItems, processedCount.get(),
+				singleFileOutput != null ? singleFileOutput : outputDir.toString(), batchFiles);
 	}
 
 	/**
@@ -214,7 +225,7 @@ public abstract class BaseCollectionService<T> {
 		return new CollectionRequest(repository, batchSize, request.dryRun(), request.incremental(), request.zip(),
 				request.clean(), request.resume(), state, request.labelFilters(), labelMode, request.maxIssues(),
 				request.sortBy(), request.sortOrder(), request.collectionType(), request.prNumber(), request.prState(),
-				request.verbose());
+				request.verbose(), request.singleFile(), request.outputFile());
 	}
 
 	/**

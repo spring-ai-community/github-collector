@@ -39,4 +39,25 @@ public interface CollectionStateRepository {
 	String saveBatch(Path outputDir, int batchIndex, Map<String, Object> batchData, String collectionType,
 			boolean dryRun);
 
+	/**
+	 * Configure single-file output mode.
+	 * @param singleFile true to accumulate all items into a single file
+	 * @param outputFile optional custom output file path (null for default)
+	 */
+	default void configureSingleFileMode(boolean singleFile, String outputFile) {
+		// Default implementation does nothing - subclasses can override
+	}
+
+	/**
+	 * Finalize collection by writing accumulated data (for single-file mode).
+	 * @param outputDir the output directory
+	 * @param collectionType type of collection (e.g., "issues", "prs")
+	 * @param dryRun if true, don't actually write the file
+	 * @return the output file path, or null if not in single-file mode
+	 */
+	default String finalizeCollection(Path outputDir, String collectionType, boolean dryRun) {
+		// Default implementation does nothing - subclasses can override
+		return null;
+	}
+
 }

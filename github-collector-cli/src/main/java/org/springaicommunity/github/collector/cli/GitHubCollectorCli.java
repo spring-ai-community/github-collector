@@ -72,8 +72,8 @@ public class GitHubCollectorCli {
 	private static CollectionRequest createRequest(ParsedConfiguration config) {
 		return new CollectionRequest(config.repository, config.batchSize, config.dryRun, config.incremental, config.zip,
 				config.clean, config.resume, config.issueState, config.labelFilters, config.labelMode, config.maxIssues,
-				config.sortBy, config.sortOrder, config.collectionType, config.prNumber, config.prState,
-				config.verbose);
+				config.sortBy, config.sortOrder, config.collectionType, config.prNumber, config.prState, config.verbose,
+				config.singleFile, config.outputFile);
 	}
 
 	private static void logConfiguration(ParsedConfiguration config) {
@@ -95,6 +95,8 @@ public class GitHubCollectorCli {
 		logger.info("  Collection type: {}", config.collectionType);
 		logger.info("  PR number: {}", config.prNumber != null ? config.prNumber : "all");
 		logger.info("  PR state: {}", config.prState);
+		logger.info("  Single file: {}", config.singleFile);
+		logger.info("  Output file: {}", config.outputFile != null ? config.outputFile : "(default)");
 	}
 
 	private static void logResults(CollectionResult result, boolean verbose) {

@@ -268,6 +268,77 @@ class DataModelsTest {
 		}
 
 		@Test
+		@DisplayName("Should create CollectionRequest using builder with defaults")
+		void shouldCreateCollectionRequestUsingBuilderWithDefaults() {
+			// When
+			CollectionRequest request = CollectionRequest.builder().repository("owner/repo").build();
+
+			// Then
+			assertThat(request.repository()).isEqualTo("owner/repo");
+			assertThat(request.batchSize()).isEqualTo(100);
+			assertThat(request.dryRun()).isFalse();
+			assertThat(request.incremental()).isFalse();
+			assertThat(request.clean()).isTrue();
+			assertThat(request.issueState()).isEqualTo("open");
+			assertThat(request.collectionType()).isEqualTo("issues");
+			assertThat(request.singleFile()).isFalse();
+			assertThat(request.outputFile()).isNull();
+		}
+
+		@Test
+		@DisplayName("Should create CollectionRequest using builder with all options")
+		void shouldCreateCollectionRequestUsingBuilderWithAllOptions() {
+			// When
+			CollectionRequest request = CollectionRequest.builder()
+				.repository("spring-projects/spring-ai")
+				.batchSize(50)
+				.dryRun(true)
+				.incremental(true)
+				.collectionType("prs")
+				.prState("merged")
+				.singleFile(true)
+				.outputFile("all_prs.json")
+				.verbose(true)
+				.build();
+
+			// Then
+			assertThat(request.repository()).isEqualTo("spring-projects/spring-ai");
+			assertThat(request.batchSize()).isEqualTo(50);
+			assertThat(request.dryRun()).isTrue();
+			assertThat(request.incremental()).isTrue();
+			assertThat(request.collectionType()).isEqualTo("prs");
+			assertThat(request.prState()).isEqualTo("merged");
+			assertThat(request.singleFile()).isTrue();
+			assertThat(request.outputFile()).isEqualTo("all_prs.json");
+			assertThat(request.verbose()).isTrue();
+		}
+
+		@Test
+		@DisplayName("Should create builder from existing request using toBuilder")
+		void shouldCreateBuilderFromExistingRequest() {
+			// Given
+			CollectionRequest original = CollectionRequest.builder()
+				.repository("owner/repo")
+				.collectionType("prs")
+				.prState("open")
+				.build();
+
+			// When
+			CollectionRequest modified = original.toBuilder().singleFile(true).outputFile("output.json").build();
+
+			// Then - original unchanged
+			assertThat(original.singleFile()).isFalse();
+			assertThat(original.outputFile()).isNull();
+
+			// And - modified has new values but preserves others
+			assertThat(modified.repository()).isEqualTo("owner/repo");
+			assertThat(modified.collectionType()).isEqualTo("prs");
+			assertThat(modified.prState()).isEqualTo("open");
+			assertThat(modified.singleFile()).isTrue();
+			assertThat(modified.outputFile()).isEqualTo("output.json");
+		}
+
+		@Test
 		@DisplayName("Should create CollectionResult record")
 		void shouldCreateCollectionResult() {
 			// Given

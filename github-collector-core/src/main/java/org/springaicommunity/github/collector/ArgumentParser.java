@@ -177,6 +177,15 @@ public class ArgumentParser {
 					i++; // Skip next argument since we consumed it
 					break;
 
+				case "--single-file":
+					config.singleFile = true;
+					break;
+
+				case "-o", "--output":
+					config.outputFile = getRequiredValue(args, i, "output");
+					i++; // Skip next argument since we consumed it
+					break;
+
 				case "-h", "--help":
 					config.helpRequested = true;
 					break;
@@ -292,6 +301,15 @@ public class ArgumentParser {
 		help.append("    ./collect_github_issues.java --type prs --repo spring-projects/spring-ai\n");
 		help.append("    ./collect_github_issues.java --type prs --number 4347 --dry-run  # Specific PR\n");
 		help.append("    ./collect_github_issues.java --type prs --pr-state merged --max-issues 10\n");
+		help.append("\n");
+		help.append("OUTPUT OPTIONS:\n");
+		help.append("    --single-file           Output all results to a single JSON file\n");
+		help.append("    -o, --output <file>     Output file path (default: all_prs.json or all_issues.json)\n");
+		help.append("\n");
+		help.append("    # Single file output examples\n");
+		help.append("    ./collect_github_issues.java --type prs --pr-state open --single-file -o all_prs.json\n");
+		help.append(
+				"    ./collect_github_issues.java --type prs --single-file --incremental --no-clean -o all_prs.json\n");
 		help.append("\n");
 
 		return help.toString();

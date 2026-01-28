@@ -333,4 +333,134 @@ class FileSystemStateRepositoryTest {
 
 	}
 
+	@Nested
+	@DisplayName("Single-File Mode Tests")
+	class SingleFileModeTest {
+
+		@Test
+		@DisplayName("Should accumulate items in single-file mode")
+		void shouldAccumulateItemsInSingleFileMode() {
+			repository.configureSingleFileMode(true, null);
+
+			Path outputDir = repository.createOutputDirectory("prs", "owner/repo", "open");
+
+			// Save multiple batches
+			Map<String, Object> batch1 = Map.of("prs", List.of(Map.of("number", 1), Map.of("number", 2)));
+			Map<String, Object> batch2 = Map.of("prs", List.of(Map.of("number", 3)));
+
+			String result1 = repository.saveBatch(outputDir, 1, batch1, "prs", false);
+			String result2 = repository.saveBatch(outputDir, 2, batch2, "prs", false);
+
+			// In single-file mode, saveBatch returns accumulation message
+			assertThat(result1).contains("accumulated");
+			assertThat(result2).contains("accumulated");
+
+			// No individual batch files should be created
+			assertThat(outputDir.resolve("batch_001_prs.json")).doesNotExist();
+			assertThat(outputDir.resolve("batch_002_prs.json")).doesNotExist();
+		}
+
+		@Test
+		@DisplayName("Should write single file on finalize")
+		void shouldWriteSingleFileOnFinalize() throws Exception {
+			repository.configureSingleFileMode(true, null);
+
+			Path outputDir = repository.createOutputDirectory("prs", "owner/repo", "open");
+
+			// Save multiple batches
+			Map<String, Object> batch1 = Map.of("prs", List.of(Map.of("number", 1), Map.of("number", 2)));
+			Map<String, Object> batch2 = Map.of("prs", List.of(Map.of("number", 3)));
+
+			repository.saveBatch(outputDir, 1, batch1, "prs", false);
+			repository.saveBatch(outputDir, 2, batch2, "prs", false);
+
+			// Finalize to write single file
+			String outputFile = repository.finalizeCollection(outputDir, "prs", false);
+
+			assertThat(outputFile).isNotNull();
+			assertThat(Path.of(outputFile)).exists();
+
+			// Verify content has all PRs
+			String content = Files.readString(Path.of(outputFile));
+			assertThat(content).contains("\"number\" : 1");
+			assertThat(content).contains("\"number\" : 2");
+			assertThat(content).contains("\"number\" : 3");
+		}
+
+		@Test
+		@DisplayName("Should use custom output file path")
+		void shouldUseCustomOutputFilePath() throws Exception {
+			Path customOutput = tempDir.resolve("custom_output.json");
+			repository.configureSingleFileMode(true, customOutput.toString());
+
+			Path outputDir = repository.createOutputDirectory("prs", "owner/repo", "open");
+
+			Map<String, Object> batch = Map.of("prs", List.of(Map.of("number", 42)));
+			repository.saveBatch(outputDir, 1, batch, "prs", false);
+
+			String result = repository.finalizeCollection(outputDir, "prs", false);
+
+			assertThat(result).isEqualTo(customOutput.toString());
+			assertThat(customOutput).exists();
+
+			String content = Files.readString(customOutput);
+			assertThat(content).contains("\"number\" : 42");
+		}
+
+		@Test
+		@DisplayName("Should return null from finalize when not in single-file mode")
+		void shouldReturnNullFromFinalizeWhenNotInSingleFileMode() {
+			// Default is not single-file mode
+			Path outputDir = repository.createOutputDirectory("prs", "owner/repo", "open");
+
+			String result = repository.finalizeCollection(outputDir, "prs", false);
+
+			assertThat(result).isNull();
+		}
+
+		@Test
+		@DisplayName("Should handle dry run in single-file mode")
+		void shouldHandleDryRunInSingleFileMode() throws Exception {
+			// Use custom output path that doesn't exist
+			Path customOutput = tempDir.resolve("dryrun_output.json");
+			repository.configureSingleFileMode(true, customOutput.toString());
+
+			Path outputDir = repository.createOutputDirectory("prs", "dryrun-owner/dryrun-repo", "open");
+
+			Map<String, Object> batch = Map.of("prs", List.of(Map.of("number", 1)));
+			repository.saveBatch(outputDir, 1, batch, "prs", false);
+
+			// Finalize with dry-run should not write file
+			String result = repository.finalizeCollection(outputDir, "prs", true);
+
+			assertThat(result).isNotNull();
+			assertThat(customOutput).doesNotExist();
+		}
+
+		@Test
+		@DisplayName("Should clear accumulated items after finalize")
+		void shouldClearAccumulatedItemsAfterFinalize() throws Exception {
+			repository.configureSingleFileMode(true, null);
+
+			Path outputDir = repository.createOutputDirectory("prs", "owner/repo", "open");
+
+			// First collection
+			Map<String, Object> batch1 = Map.of("prs", List.of(Map.of("number", 1)));
+			repository.saveBatch(outputDir, 1, batch1, "prs", false);
+			repository.finalizeCollection(outputDir, "prs", false);
+
+			// Second collection (should start fresh)
+			Path outputDir2 = repository.createOutputDirectory("prs", "owner/repo2", "open");
+			Map<String, Object> batch2 = Map.of("prs", List.of(Map.of("number", 99)));
+			repository.saveBatch(outputDir2, 1, batch2, "prs", false);
+			String result = repository.finalizeCollection(outputDir2, "prs", false);
+
+			// Second file should only have PR #99
+			String content = Files.readString(Path.of(result));
+			assertThat(content).contains("\"number\" : 99");
+			assertThat(content).doesNotContain("\"number\" : 1");
+		}
+
+	}
+
 }

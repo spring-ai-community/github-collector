@@ -178,7 +178,8 @@ class PRCollectionServiceTest {
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(25);
 
 			CollectionRequest request = new CollectionRequest("owner/repo", 50, true, false, false, true, false,
-					"closed", List.of("bug", "enhancement"), "all", null, null, null, "prs", null, "open", false);
+					"closed", List.of("bug", "enhancement"), "all", null, null, null, "prs", null, "open", false, false,
+					null);
 
 			CollectionResult result = prCollectionService.collectItems(request);
 
@@ -569,7 +570,7 @@ class PRCollectionServiceTest {
 
 			// Request with zip=true
 			CollectionRequest request = new CollectionRequest("owner/repo", 50, false, false, true, true, false,
-					"closed", List.of(), "any", null, null, null, "prs", 200, "all", false);
+					"closed", List.of(), "any", null, null, null, "prs", 200, "all", false, false, null);
 
 			prCollectionService.collectItems(request);
 
