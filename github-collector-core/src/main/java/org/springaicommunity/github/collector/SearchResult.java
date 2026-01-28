@@ -1,5 +1,7 @@
 package org.springaicommunity.github.collector;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 /**
@@ -10,7 +12,7 @@ import java.util.List;
  * @param nextCursor cursor for fetching the next page (null if no more pages)
  * @param hasMore whether there are more items available
  */
-public record SearchResult<T>(List<T> items, String nextCursor, boolean hasMore) {
+public record SearchResult<T>(List<T> items, @Nullable String nextCursor, boolean hasMore) {
 
 	/**
 	 * Create an empty result with no more pages.

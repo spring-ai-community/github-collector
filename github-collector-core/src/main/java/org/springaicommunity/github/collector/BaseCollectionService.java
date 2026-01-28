@@ -1,6 +1,7 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +85,7 @@ public abstract class BaseCollectionService<T> {
 	 * @param cursor pagination cursor (null for first page)
 	 * @return SearchResult containing typed items and pagination info
 	 */
-	protected abstract SearchResult<T> fetchBatch(String searchQuery, int batchSize, String cursor);
+	protected abstract SearchResult<T> fetchBatch(String searchQuery, int batchSize, @Nullable String cursor);
 
 	/**
 	 * Process items in current batch (e.g., enhance with additional data)

@@ -1,5 +1,7 @@
 package org.springaicommunity.github.collector;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 /**
@@ -14,13 +16,13 @@ public record CollectionRequest(
 		boolean resume, String issueState, List<String> labelFilters, String labelMode,
 
 		// Phase 1: Essential dashboard parameters
-		Integer maxIssues, // null = unlimited (backward compatible)
+		@Nullable Integer maxIssues, // null = unlimited (backward compatible)
 		String sortBy, // "updated" | "created" | "comments" | "reactions"
 		String sortOrder, // "desc" | "asc"
 
 		// Phase 2: PR collection parameters
 		String collectionType, // "issues" | "prs"
-		Integer prNumber, // specific PR number (when type=prs), null = all
+		@Nullable Integer prNumber, // specific PR number (when type=prs), null = all
 		String prState, // "open" | "closed" | "merged" | "all" (when type=prs)
 
 		// Phase 3: Logging parameters

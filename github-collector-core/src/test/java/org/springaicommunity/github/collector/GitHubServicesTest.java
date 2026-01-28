@@ -9,9 +9,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.kohsuke.github.GHRateLimit;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GitHub;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -30,9 +27,6 @@ import static org.mockito.Mockito.*;
 @DisplayName("GitHubServices Tests - Plain JUnit with Mocked APIs")
 @ExtendWith(MockitoExtension.class)
 class GitHubServicesTest {
-
-	@Mock
-	private GitHub mockGitHub;
 
 	@Mock
 	private GitHubHttpClient mockHttpClient;
@@ -56,31 +50,55 @@ class GitHubServicesTest {
 
 		@BeforeEach
 		void setUp() {
-			gitHubRestService = new GitHubRestService(mockGitHub, mockHttpClient, realObjectMapper);
+			gitHubRestService = new GitHubRestService(mockHttpClient, realObjectMapper);
 		}
 
 		@Test
 		@DisplayName("Should get rate limit from GitHub API")
 		void shouldGetRateLimitFromGitHubAPI() throws IOException {
-			GHRateLimit mockRateLimit = mock(GHRateLimit.class);
-			when(mockGitHub.getRateLimit()).thenReturn(mockRateLimit);
+			String mockResponse = """
+					{
+					    "resources": {
+					        "core": {
+					            "limit": 5000,
+					            "remaining": 4999,
+					            "reset": 1700000000,
+					            "used": 1
+					        }
+					    }
+					}
+					""";
+			when(mockHttpClient.get("/rate_limit")).thenReturn(mockResponse);
 
-			GHRateLimit result = gitHubRestService.getRateLimit();
+			RateLimitInfo result = gitHubRestService.getRateLimit();
 
-			assertThat(result).isEqualTo(mockRateLimit);
-			verify(mockGitHub).getRateLimit();
+			assertThat(result.limit()).isEqualTo(5000);
+			assertThat(result.remaining()).isEqualTo(4999);
+			assertThat(result.used()).isEqualTo(1);
+			verify(mockHttpClient).get("/rate_limit");
 		}
 
 		@Test
 		@DisplayName("Should get repository from GitHub API")
 		void shouldGetRepositoryFromGitHubAPI() throws IOException {
-			GHRepository mockRepository = mock(GHRepository.class);
-			when(mockGitHub.getRepository("spring-projects/spring-ai")).thenReturn(mockRepository);
+			String mockResponse = """
+					{
+					    "id": 12345,
+					    "name": "spring-ai",
+					    "full_name": "spring-projects/spring-ai",
+					    "description": "AI framework for Spring",
+					    "html_url": "https://github.com/spring-projects/spring-ai",
+					    "private": false,
+					    "default_branch": "main"
+					}
+					""";
+			when(mockHttpClient.get("/repos/spring-projects/spring-ai")).thenReturn(mockResponse);
 
-			GHRepository result = gitHubRestService.getRepository("spring-projects/spring-ai");
+			RepositoryInfo result = gitHubRestService.getRepository("spring-projects/spring-ai");
 
-			assertThat(result).isEqualTo(mockRepository);
-			verify(mockGitHub).getRepository("spring-projects/spring-ai");
+			assertThat(result.fullName()).isEqualTo("spring-projects/spring-ai");
+			assertThat(result.name()).isEqualTo("spring-ai");
+			verify(mockHttpClient).get("/repos/spring-projects/spring-ai");
 		}
 
 		@Test
@@ -539,14 +557,14 @@ class GitHubServicesTest {
 			// This test verifies that all services can be instantiated and tested
 			// without requiring Spring Boot context
 
-			GitHubRestService restService = new GitHubRestService(mockGitHub, mockHttpClient, realObjectMapper);
+			GitHubRestService restService = new GitHubRestService(mockHttpClient, realObjectMapper);
 			GitHubGraphQLService graphQLService = new GitHubGraphQLService(mockGraphQLHttpClient, realObjectMapper);
 
 			assertThat(restService).isNotNull();
 			assertThat(graphQLService).isNotNull();
 
 			// Verify that creating these services doesn't trigger any external calls
-			verifyNoInteractions(mockGitHub, mockHttpClient, mockGraphQLHttpClient);
+			verifyNoInteractions(mockHttpClient, mockGraphQLHttpClient);
 		}
 
 	}

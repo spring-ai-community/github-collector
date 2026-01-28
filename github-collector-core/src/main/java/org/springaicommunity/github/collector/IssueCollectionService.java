@@ -1,6 +1,7 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,17 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 		return "issues";
 	}
 
+	/**
+	 * Collects GitHub issues based on the provided request parameters.
+	 *
+	 * <p>
+	 * This method fetches issues matching the specified criteria (state, labels) and
+	 * saves them in batches to the output directory. The collection process supports
+	 * pagination, rate limiting, and resumption from previous runs.
+	 * @param request the collection request containing repository, filters, and options
+	 * @return the collection result with counts and output file information
+	 * @throws RuntimeException if the collection fails due to API errors or I/O issues
+	 */
 	@Override
 	public CollectionResult collectItems(CollectionRequest request) {
 		logger.info("Starting issue collection for repository: {}", request.repository());
@@ -78,7 +90,7 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 	}
 
 	@Override
-	protected SearchResult<Issue> fetchBatch(String searchQuery, int batchSize, String cursor) {
+	protected SearchResult<Issue> fetchBatch(String searchQuery, int batchSize, @Nullable String cursor) {
 		return graphQLService.searchIssues(searchQuery, "updated", "desc", batchSize, cursor);
 	}
 

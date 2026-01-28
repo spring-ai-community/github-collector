@@ -2,10 +2,7 @@ package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.kohsuke.github.GitHub;
-import org.kohsuke.github.GitHubBuilder;
-
-import java.io.IOException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Builder for creating GitHub collector services without Spring dependencies.
@@ -96,20 +93,22 @@ public class GitHubCollectorBuilder {
 
 	/**
 	 * Set collection properties.
-	 * @param properties configuration properties
+	 * @param properties configuration properties (null to use defaults)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder properties(CollectionProperties properties) {
-		this.properties = properties;
+	public GitHubCollectorBuilder properties(@Nullable CollectionProperties properties) {
+		if (properties != null) {
+			this.properties = properties;
+		}
 		return this;
 	}
 
 	/**
 	 * Set a custom ObjectMapper.
-	 * @param objectMapper Jackson ObjectMapper
+	 * @param objectMapper Jackson ObjectMapper (null to use default)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder objectMapper(ObjectMapper objectMapper) {
+	public GitHubCollectorBuilder objectMapper(@Nullable ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
 		return this;
 	}
@@ -120,10 +119,10 @@ public class GitHubCollectorBuilder {
 	 *
 	 * <p>
 	 * When a custom client is provided, the token is not required.
-	 * @param httpClient custom GitHubClient implementation
+	 * @param httpClient custom GitHubClient implementation (null to use default)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder httpClient(GitHubClient httpClient) {
+	public GitHubCollectorBuilder httpClient(@Nullable GitHubClient httpClient) {
 		this.httpClient = httpClient;
 		return this;
 	}
@@ -131,10 +130,11 @@ public class GitHubCollectorBuilder {
 	/**
 	 * Set a custom CollectionStateRepository implementation. Useful for testing with
 	 * mocks or for alternative storage backends.
-	 * @param stateRepository custom CollectionStateRepository implementation
+	 * @param stateRepository custom CollectionStateRepository implementation (null to use
+	 * default)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder stateRepository(CollectionStateRepository stateRepository) {
+	public GitHubCollectorBuilder stateRepository(@Nullable CollectionStateRepository stateRepository) {
 		this.stateRepository = stateRepository;
 		return this;
 	}
@@ -142,10 +142,10 @@ public class GitHubCollectorBuilder {
 	/**
 	 * Set a custom ArchiveService implementation. Useful for testing with mocks or for
 	 * alternative archive formats.
-	 * @param archiveService custom ArchiveService implementation
+	 * @param archiveService custom ArchiveService implementation (null to use default)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder archiveService(ArchiveService archiveService) {
+	public GitHubCollectorBuilder archiveService(@Nullable ArchiveService archiveService) {
 		this.archiveService = archiveService;
 		return this;
 	}
@@ -153,10 +153,10 @@ public class GitHubCollectorBuilder {
 	/**
 	 * Set a custom BatchStrategy implementation. Useful for testing with mocks or for
 	 * alternative batching behaviors.
-	 * @param batchStrategy custom BatchStrategy implementation
+	 * @param batchStrategy custom BatchStrategy implementation (null to use default)
 	 * @return this builder
 	 */
-	public GitHubCollectorBuilder batchStrategy(BatchStrategy<?> batchStrategy) {
+	public GitHubCollectorBuilder batchStrategy(@Nullable BatchStrategy<?> batchStrategy) {
 		this.batchStrategy = batchStrategy;
 		return this;
 	}
@@ -218,13 +218,12 @@ public class GitHubCollectorBuilder {
 	private Components buildComponents() {
 		ObjectMapper mapper = this.objectMapper != null ? this.objectMapper : createDefaultObjectMapper();
 		GitHubClient client = this.httpClient != null ? this.httpClient : new GitHubHttpClient(token);
-		GitHub gitHub = this.httpClient != null ? null : createGitHub();
 		CollectionStateRepository repository = this.stateRepository != null ? this.stateRepository
 				: new FileSystemStateRepository(mapper);
 		ArchiveService archive = this.archiveService != null ? this.archiveService : new ZipArchiveService();
 		BatchStrategy<?> batch = this.batchStrategy != null ? this.batchStrategy : new FixedBatchStrategy<>();
 
-		GitHubRestService restService = new GitHubRestService(gitHub, client, mapper);
+		GitHubRestService restService = new GitHubRestService(client, mapper);
 		GitHubGraphQLService graphQLService = new GitHubGraphQLService(client, mapper);
 
 		return new Components(restService, graphQLService, mapper, repository, archive, batch);
@@ -234,15 +233,6 @@ public class GitHubCollectorBuilder {
 		ObjectMapper mapper = new ObjectMapper();
 		mapper.registerModule(new JavaTimeModule());
 		return mapper;
-	}
-
-	private GitHub createGitHub() {
-		try {
-			return new GitHubBuilder().withOAuthToken(token).build();
-		}
-		catch (IOException e) {
-			throw new IllegalStateException("Failed to create GitHub client: " + e.getMessage(), e);
-		}
 	}
 
 	/**

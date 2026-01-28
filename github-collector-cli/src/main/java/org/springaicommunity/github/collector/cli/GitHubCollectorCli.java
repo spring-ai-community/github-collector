@@ -62,7 +62,7 @@ public class GitHubCollectorCli {
 		}
 		else {
 			IssueCollectionService issueCollector = builder.buildIssueCollector();
-			result = issueCollector.collectIssues(createRequest(config));
+			result = issueCollector.collectItems(createRequest(config));
 		}
 
 		// Log results

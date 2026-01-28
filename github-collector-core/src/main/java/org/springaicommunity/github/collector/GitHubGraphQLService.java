@@ -2,6 +2,7 @@ package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +71,7 @@ public class GitHubGraphQLService implements GraphQLService {
 
 	@Override
 	public SearchResult<Issue> searchIssues(String searchQuery, String sortBy, String sortOrder, int first,
-			String after) {
+			@Nullable String after) {
 		String sortParam = convertSortToGraphQL(sortBy);
 		String orderParam = convertOrderToGraphQL(sortOrder);
 
@@ -150,7 +151,7 @@ public class GitHubGraphQLService implements GraphQLService {
 
 	// ========== JSON Parsing Methods (at service boundary) ==========
 
-	private Issue parseIssue(JsonNode node) {
+	private @Nullable Issue parseIssue(JsonNode node) {
 		if (node == null || node.isMissingNode() || node.isNull()) {
 			return null;
 		}
@@ -198,7 +199,7 @@ public class GitHubGraphQLService implements GraphQLService {
 		return labels;
 	}
 
-	private LocalDateTime parseDateTime(String dateTimeStr) {
+	private @Nullable LocalDateTime parseDateTime(@Nullable String dateTimeStr) {
 		if (dateTimeStr == null || dateTimeStr.isEmpty()) {
 			return null;
 		}

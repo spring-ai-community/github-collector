@@ -28,9 +28,9 @@ import org.springaicommunity.github.collector.*;
 @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "GITHUB_TOKEN", matches = ".+")
 class SimpleIntegrationIT {
 
-	private GitHubRestService restService;
+	private RestService restService;
 
-	private GitHubGraphQLService graphQLService;
+	private GraphQLService graphQLService;
 
 	private IssueCollectionService collectionService;
 
@@ -67,11 +67,11 @@ class SimpleIntegrationIT {
 	@Test
 	@DisplayName("REST API connectivity test")
 	void restApiConnectivityTest() {
-		// Just verify we can get repository info
+		// Just verify we can get repository info via getRepository
 		assertThatCode(() -> {
-			var repoInfo = restService.getRepositoryInfo("spring-projects", "spring-ai");
-			assertThat(repoInfo).isNotNull();
-			assertThat(repoInfo.has("name")).isTrue();
+			var repo = restService.getRepository("spring-projects/spring-ai");
+			assertThat(repo).isNotNull();
+			assertThat(repo.name()).isNotEmpty();
 		}).doesNotThrowAnyException();
 	}
 

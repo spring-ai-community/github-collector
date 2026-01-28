@@ -1,5 +1,7 @@
 package org.springaicommunity.github.collector;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -35,11 +37,12 @@ import java.util.List;
  * @param analysisTimestamp when analysis was performed
  * @param softApprovals list of soft approvals found
  */
-public record AnalyzedPullRequest(int number, String title, String body, String state, LocalDateTime createdAt,
-		LocalDateTime updatedAt, LocalDateTime closedAt, LocalDateTime mergedAt, String url, String htmlUrl,
-		Author author, List<Comment> comments, List<Label> labels, List<Review> reviews, boolean draft, boolean merged,
-		String mergeCommitSha, String headRef, String baseRef, int additions, int deletions, int changedFiles,
-		boolean softApprovalDetected, String analysisTimestamp, List<SoftApproval> softApprovals) {
+public record AnalyzedPullRequest(int number, String title, @Nullable String body, String state,
+		LocalDateTime createdAt, LocalDateTime updatedAt, @Nullable LocalDateTime closedAt,
+		@Nullable LocalDateTime mergedAt, String url, String htmlUrl, Author author, List<Comment> comments,
+		List<Label> labels, List<Review> reviews, boolean draft, boolean merged, @Nullable String mergeCommitSha,
+		@Nullable String headRef, @Nullable String baseRef, int additions, int deletions, int changedFiles,
+		boolean softApprovalDetected, @Nullable String analysisTimestamp, List<SoftApproval> softApprovals) {
 
 	/**
 	 * Create an AnalyzedPullRequest from a PullRequest with analysis results.

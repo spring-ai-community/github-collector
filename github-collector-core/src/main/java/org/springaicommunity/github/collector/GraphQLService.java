@@ -1,5 +1,7 @@
 package org.springaicommunity.github.collector;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Interface for GitHub GraphQL API operations.
  *
@@ -34,6 +36,7 @@ public interface GraphQLService {
 	 * @param after Cursor for pagination (null for first page)
 	 * @return SearchResult containing Issue records and pagination info
 	 */
-	SearchResult<Issue> searchIssues(String searchQuery, String sortBy, String sortOrder, int first, String after);
+	SearchResult<Issue> searchIssues(String searchQuery, String sortBy, String sortOrder, int first,
+			@Nullable String after);
 
 }

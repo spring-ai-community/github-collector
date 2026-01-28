@@ -2,9 +2,7 @@ package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.kohsuke.github.GHRateLimit;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GitHub;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,26 +27,42 @@ public class GitHubRestService implements RestService {
 
 	private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
 
-	private final GitHub gitHub;
-
 	private final GitHubClient httpClient;
 
 	private final ObjectMapper objectMapper;
 
-	public GitHubRestService(GitHub gitHub, GitHubClient httpClient, ObjectMapper objectMapper) {
-		this.gitHub = gitHub;
+	public GitHubRestService(GitHubClient httpClient, ObjectMapper objectMapper) {
 		this.httpClient = httpClient;
 		this.objectMapper = objectMapper;
 	}
 
 	@Override
-	public GHRateLimit getRateLimit() throws IOException {
-		return gitHub.getRateLimit();
+	public RateLimitInfo getRateLimit() throws IOException {
+		try {
+			String response = httpClient.get("/rate_limit");
+			JsonNode root = objectMapper.readTree(response);
+			JsonNode core = root.path("resources").path("core");
+			return new RateLimitInfo(core.path("limit").asInt(), core.path("remaining").asInt(),
+					core.path("reset").asLong(), core.path("used").asInt());
+		}
+		catch (Exception e) {
+			throw new IOException("Failed to get rate limit: " + e.getMessage(), e);
+		}
 	}
 
 	@Override
-	public GHRepository getRepository(String repoName) throws IOException {
-		return gitHub.getRepository(repoName);
+	public RepositoryInfo getRepository(String repoName) throws IOException {
+		try {
+			String response = httpClient.get("/repos/" + repoName);
+			JsonNode node = objectMapper.readTree(response);
+			return new RepositoryInfo(node.path("id").asLong(), node.path("name").asText(),
+					node.path("full_name").asText(), node.path("description").asText(null),
+					node.path("html_url").asText(), node.path("private").asBoolean(),
+					node.path("default_branch").asText("main"));
+		}
+		catch (Exception e) {
+			throw new IOException("Failed to get repository: " + e.getMessage(), e);
+		}
 	}
 
 	@Override
@@ -185,7 +199,7 @@ public class GitHubRestService implements RestService {
 	}
 
 	@Override
-	public SearchResult<PullRequest> searchPRs(String searchQuery, int batchSize, String cursor) {
+	public SearchResult<PullRequest> searchPRs(String searchQuery, int batchSize, @Nullable String cursor) {
 		try {
 			int page = 1;
 			if (cursor != null && !cursor.isEmpty()) {
@@ -229,7 +243,7 @@ public class GitHubRestService implements RestService {
 
 	// ========== JSON Parsing Methods ==========
 
-	private PullRequest parsePullRequest(JsonNode node) {
+	private @Nullable PullRequest parsePullRequest(JsonNode node) {
 		if (node == null || node.isMissingNode() || node.isNull()) {
 			return null;
 		}
@@ -260,7 +274,7 @@ public class GitHubRestService implements RestService {
 		}
 	}
 
-	private PullRequest parsePullRequestFromSearch(JsonNode node) {
+	private @Nullable PullRequest parsePullRequestFromSearch(JsonNode node) {
 		// Search API returns different structure than PR endpoint
 		if (node == null || node.isMissingNode() || node.isNull()) {
 			return null;
@@ -305,7 +319,7 @@ public class GitHubRestService implements RestService {
 		return reviews;
 	}
 
-	private Review parseReview(JsonNode node) {
+	private @Nullable Review parseReview(JsonNode node) {
 		if (node == null || node.isMissingNode() || node.isNull()) {
 			return null;
 		}
@@ -339,7 +353,7 @@ public class GitHubRestService implements RestService {
 		return labels;
 	}
 
-	private LocalDateTime parseDateTime(String dateTimeStr) {
+	private @Nullable LocalDateTime parseDateTime(@Nullable String dateTimeStr) {
 		if (dateTimeStr == null || dateTimeStr.isEmpty()) {
 			return null;
 		}

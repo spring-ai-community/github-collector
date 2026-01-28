@@ -1,7 +1,6 @@
 package org.springaicommunity.github.collector;
 
-import org.kohsuke.github.GHRateLimit;
-import org.kohsuke.github.GHRepository;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.util.List;
@@ -20,15 +19,15 @@ public interface RestService {
 	 * @return Rate limit information
 	 * @throws IOException if API call fails
 	 */
-	GHRateLimit getRateLimit() throws IOException;
+	RateLimitInfo getRateLimit() throws IOException;
 
 	/**
 	 * Get repository by name.
 	 * @param repoName Repository name in "owner/repo" format
-	 * @return Repository object
+	 * @return Repository information
 	 * @throws IOException if API call fails
 	 */
-	GHRepository getRepository(String repoName) throws IOException;
+	RepositoryInfo getRepository(String repoName) throws IOException;
 
 	/**
 	 * Get total issue count for a repository.
@@ -99,6 +98,6 @@ public interface RestService {
 	 * @param cursor Pagination cursor (page number as string, or null for first page)
 	 * @return SearchResult containing PullRequest records and pagination info
 	 */
-	SearchResult<PullRequest> searchPRs(String searchQuery, int batchSize, String cursor);
+	SearchResult<PullRequest> searchPRs(String searchQuery, int batchSize, @Nullable String cursor);
 
 }

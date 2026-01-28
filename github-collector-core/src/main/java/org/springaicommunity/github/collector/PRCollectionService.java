@@ -1,6 +1,7 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +32,21 @@ public class PRCollectionService extends BaseCollectionService<AnalyzedPullReque
 		return "prs";
 	}
 
+	/**
+	 * Collects GitHub pull requests based on the provided request parameters.
+	 *
+	 * <p>
+	 * This method fetches pull requests matching the specified criteria (state, labels)
+	 * and saves them in batches to the output directory. Each PR is enriched with review
+	 * data and analyzed for soft approval patterns (approvals from non-members).
+	 *
+	 * <p>
+	 * Supports both single PR collection (when {@code prNumber} is specified) and bulk
+	 * collection with pagination, rate limiting, and resumption.
+	 * @param request the collection request containing repository, filters, and options
+	 * @return the collection result with counts and output file information
+	 * @throws RuntimeException if the collection fails due to API errors or I/O issues
+	 */
 	@Override
 	public CollectionResult collectItems(CollectionRequest request) {
 		logger.info("Starting PR collection for repository: {}", request.repository());
@@ -140,7 +156,7 @@ public class PRCollectionService extends BaseCollectionService<AnalyzedPullReque
 	}
 
 	@Override
-	protected SearchResult<AnalyzedPullRequest> fetchBatch(String searchQuery, int batchSize, String cursor) {
+	protected SearchResult<AnalyzedPullRequest> fetchBatch(String searchQuery, int batchSize, @Nullable String cursor) {
 		// Fetch PRs from REST API
 		SearchResult<PullRequest> prResult = restService.searchPRs(searchQuery, batchSize, cursor);
 
