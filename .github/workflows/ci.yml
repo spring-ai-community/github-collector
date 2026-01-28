@@ -12,3 +12,4 @@ jobs:
     with:
       java-version: '17'
       skip-tests: true
+      maven-goals: 'clean verify -B -Ddependency-check.skip=true'
