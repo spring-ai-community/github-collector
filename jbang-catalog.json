@@ -1,0 +1,14 @@
+{
+  "catalogs": {
+    "github-collector": {
+      "catalog-ref": "https://raw.githubusercontent.com/spring-ai-community/github-collector/main/jbang-catalog.json"
+    }
+  },
+  "aliases": {
+    "collect": {
+      "script-ref": "https://raw.githubusercontent.com/spring-ai-community/github-collector/main/jbang/collect.java",
+      "description": "Collect GitHub issues and PRs with advanced filtering"
+    }
+  },
+  "templates": {}
+}
