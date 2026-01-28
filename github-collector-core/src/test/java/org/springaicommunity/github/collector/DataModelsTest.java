@@ -2,7 +2,6 @@ package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,8 +25,7 @@ class DataModelsTest {
 
 	@BeforeEach
 	void setUp() {
-		objectMapper = new ObjectMapper();
-		objectMapper.registerModule(new JavaTimeModule());
+		objectMapper = ObjectMapperFactory.create();
 	}
 
 	@Nested

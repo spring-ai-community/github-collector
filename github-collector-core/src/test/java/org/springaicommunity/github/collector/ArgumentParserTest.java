@@ -22,6 +22,11 @@ class ArgumentParserTest {
 
 	private ArgumentParser argumentParser;
 
+	static boolean isGitHubTokenAvailable() {
+		String token = EnvironmentSupport.get("GITHUB_TOKEN");
+		return token != null && !token.isBlank();
+	}
+
 	@BeforeEach
 	void setUp() {
 		// Create default properties without Spring context
@@ -461,7 +466,7 @@ class ArgumentParserTest {
 
 		@Test
 		@DisplayName("Should pass validation when GITHUB_TOKEN is set")
-		@org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "GITHUB_TOKEN", matches = ".+")
+		@org.junit.jupiter.api.condition.EnabledIf("org.springaicommunity.github.collector.ArgumentParserTest#isGitHubTokenAvailable")
 		void shouldPassValidationWhenGitHubTokenIsSet() {
 			// In test environment, GITHUB_TOKEN is set, so validation should pass
 			// This test verifies the happy path

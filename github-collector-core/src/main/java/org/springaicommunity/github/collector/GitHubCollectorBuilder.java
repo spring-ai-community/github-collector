@@ -1,7 +1,6 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -83,7 +82,7 @@ public class GitHubCollectorBuilder {
 	 * @throws IllegalStateException if GITHUB_TOKEN is not set
 	 */
 	public GitHubCollectorBuilder tokenFromEnv() {
-		this.token = System.getenv("GITHUB_TOKEN");
+		this.token = EnvironmentSupport.get("GITHUB_TOKEN");
 		if (this.token == null || this.token.trim().isEmpty()) {
 			throw new IllegalStateException(
 					"GITHUB_TOKEN environment variable is required. Please set your GitHub personal access token.");
@@ -230,9 +229,7 @@ public class GitHubCollectorBuilder {
 	}
 
 	private ObjectMapper createDefaultObjectMapper() {
-		ObjectMapper mapper = new ObjectMapper();
-		mapper.registerModule(new JavaTimeModule());
-		return mapper;
+		return ObjectMapperFactory.create();
 	}
 
 	/**

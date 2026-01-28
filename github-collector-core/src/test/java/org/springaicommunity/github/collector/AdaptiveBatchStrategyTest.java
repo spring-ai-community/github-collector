@@ -33,7 +33,7 @@ class AdaptiveBatchStrategyTest {
 
 	@BeforeEach
 	void setUp() {
-		objectMapper = new ObjectMapper();
+		objectMapper = ObjectMapperFactory.create();
 		// Default threshold of 10000 bytes
 		strategy = new AdaptiveBatchStrategy(objectMapper, 10000);
 	}
@@ -169,7 +169,7 @@ class AdaptiveBatchStrategyTest {
 		@DisplayName("Should handle serialization exception gracefully")
 		void shouldHandleSerializationException() {
 			// Create an ObjectMapper with a custom serializer that always throws
-			ObjectMapper failingMapper = new ObjectMapper();
+			ObjectMapper failingMapper = ObjectMapperFactory.create();
 			SimpleModule module = new SimpleModule();
 			module.addSerializer(ObjectNode.class, new StdSerializer<ObjectNode>(ObjectNode.class) {
 				@Override
@@ -228,7 +228,7 @@ class AdaptiveBatchStrategyTest {
 		@Test
 		@DisplayName("Should store object mapper and threshold")
 		void shouldStoreObjectMapperAndThreshold() {
-			ObjectMapper mapper = new ObjectMapper();
+			ObjectMapper mapper = ObjectMapperFactory.create();
 			AdaptiveBatchStrategy customStrategy = new AdaptiveBatchStrategy(mapper, 5000);
 
 			// Verify strategy works with provided components

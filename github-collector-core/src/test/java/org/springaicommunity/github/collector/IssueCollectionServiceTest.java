@@ -63,8 +63,7 @@ class IssueCollectionServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		realObjectMapper = new ObjectMapper();
-		realObjectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+		realObjectMapper = ObjectMapperFactory.create();
 
 		// Setup real properties with safe defaults
 		realProperties = new CollectionProperties();

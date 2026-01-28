@@ -32,7 +32,7 @@ class FileSystemStateRepositoryTest {
 
 	@BeforeEach
 	void setUp() {
-		objectMapper = new ObjectMapper();
+		objectMapper = ObjectMapperFactory.create();
 		repository = new FileSystemStateRepository(objectMapper);
 
 		// Change to temp directory for all tests
@@ -321,7 +321,7 @@ class FileSystemStateRepositoryTest {
 		@Test
 		@DisplayName("Should accept ObjectMapper in constructor")
 		void shouldAcceptObjectMapperInConstructor() {
-			ObjectMapper mapper = new ObjectMapper();
+			ObjectMapper mapper = ObjectMapperFactory.create();
 			FileSystemStateRepository repo = new FileSystemStateRepository(mapper);
 
 			// Verify it works by saving a batch

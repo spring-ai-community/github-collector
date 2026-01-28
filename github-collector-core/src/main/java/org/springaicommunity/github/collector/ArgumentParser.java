@@ -321,7 +321,7 @@ public class ArgumentParser {
 	 */
 	public void validateEnvironment() {
 		// Check for GitHub token
-		String githubToken = System.getenv("GITHUB_TOKEN");
+		String githubToken = EnvironmentSupport.get("GITHUB_TOKEN");
 		if (githubToken == null || githubToken.trim().isEmpty()) {
 			throw new IllegalStateException(
 					"GITHUB_TOKEN environment variable is required. Please set your GitHub personal access token: export GITHUB_TOKEN=your_token_here");

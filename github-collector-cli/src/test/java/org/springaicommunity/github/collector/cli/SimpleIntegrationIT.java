@@ -25,7 +25,7 @@ import org.springaicommunity.github.collector.*;
  * Requires GITHUB_TOKEN environment variable to be set.
  */
 @DisplayName("Simple Integration Tests")
-@org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "GITHUB_TOKEN", matches = ".+")
+@org.junit.jupiter.api.condition.EnabledIf("isGitHubTokenAvailable")
 class SimpleIntegrationIT {
 
 	private RestService restService;
@@ -39,10 +39,14 @@ class SimpleIntegrationIT {
 	@TempDir
 	Path tempDir;
 
+	static boolean isGitHubTokenAvailable() {
+		String token = EnvironmentSupport.get("GITHUB_TOKEN");
+		return token != null && !token.isBlank();
+	}
+
 	@BeforeEach
 	void setUp() throws Exception {
-		objectMapper = new ObjectMapper();
-		objectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+		objectMapper = ObjectMapperFactory.create();
 
 		// Use GitHubCollectorBuilder to create services
 		GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().tokenFromEnv().objectMapper(objectMapper);

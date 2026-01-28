@@ -1,7 +1,6 @@
 package org.springaicommunity.github.collector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -125,8 +124,7 @@ class ConfigurationSupportTest {
 		@Test
 		@DisplayName("Should accept custom ObjectMapper")
 		void shouldAcceptCustomObjectMapper() {
-			ObjectMapper mapper = new ObjectMapper();
-			mapper.registerModule(new JavaTimeModule());
+			ObjectMapper mapper = ObjectMapperFactory.create();
 
 			GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().objectMapper(mapper);
 

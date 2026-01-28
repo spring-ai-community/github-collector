@@ -28,7 +28,7 @@ class FixedBatchStrategyTest {
 	@BeforeEach
 	void setUp() {
 		strategy = new FixedBatchStrategy();
-		objectMapper = new ObjectMapper();
+		objectMapper = ObjectMapperFactory.create();
 	}
 
 	@Nested
