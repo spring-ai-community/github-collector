@@ -11,5 +11,3 @@ jobs:
     uses: spring-ai-community/community-workflows/.github/workflows/ci-build.yml@main
     with:
       java-version: '17'
-      skip-tests: true
-      maven-goals: 'clean verify -B -Ddependency-check.skip=true'
