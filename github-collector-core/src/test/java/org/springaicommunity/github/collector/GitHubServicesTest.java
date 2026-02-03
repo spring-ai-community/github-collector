@@ -669,6 +669,158 @@ class GitHubServicesTest {
 
 		}
 
+		@Nested
+		@DisplayName("Releases API Tests")
+		class ReleasesAPITest {
+
+			@Test
+			@DisplayName("Should get repository releases")
+			void shouldGetRepositoryReleases() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 12345,
+						        "tag_name": "v1.0.0",
+						        "name": "Version 1.0.0",
+						        "body": "## Bug Fixes\\n- Fixed #123\\n- Fixed #456",
+						        "draft": false,
+						        "prerelease": false,
+						        "created_at": "2024-01-15T10:00:00Z",
+						        "published_at": "2024-01-15T12:00:00Z",
+						        "author": {"login": "maintainer"},
+						        "html_url": "https://github.com/owner/repo/releases/tag/v1.0.0"
+						    },
+						    {
+						        "id": 12346,
+						        "tag_name": "v1.0.1",
+						        "name": "Version 1.0.1",
+						        "body": "## Enhancements\\n- Added feature #789",
+						        "draft": false,
+						        "prerelease": false,
+						        "created_at": "2024-02-01T10:00:00Z",
+						        "published_at": "2024-02-01T12:00:00Z",
+						        "author": {"login": "maintainer"},
+						        "html_url": "https://github.com/owner/repo/releases/tag/v1.0.1"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/releases?per_page=100")).thenReturn(mockResponse);
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).hasSize(2);
+				assertThat(result.get(0).tagName()).isEqualTo("v1.0.0");
+				assertThat(result.get(0).name()).isEqualTo("Version 1.0.0");
+				assertThat(result.get(0).body()).contains("Bug Fixes");
+				assertThat(result.get(0).draft()).isFalse();
+				assertThat(result.get(0).prerelease()).isFalse();
+				assertThat(result.get(0).author().login()).isEqualTo("maintainer");
+				assertThat(result.get(1).tagName()).isEqualTo("v1.0.1");
+			}
+
+			@Test
+			@DisplayName("Should handle draft releases")
+			void shouldHandleDraftReleases() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 99999,
+						        "tag_name": "v2.0.0-draft",
+						        "name": "Draft Release",
+						        "body": "Work in progress",
+						        "draft": true,
+						        "prerelease": false,
+						        "created_at": "2024-03-01T10:00:00Z",
+						        "author": {"login": "developer"},
+						        "html_url": "https://github.com/owner/repo/releases/tag/v2.0.0-draft"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/releases?per_page=100")).thenReturn(mockResponse);
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).draft()).isTrue();
+				assertThat(result.get(0).publishedAt()).isNull();
+			}
+
+			@Test
+			@DisplayName("Should handle prerelease releases")
+			void shouldHandlePrereleaseReleases() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 88888,
+						        "tag_name": "v1.0.0-M1",
+						        "name": "Milestone 1",
+						        "body": "First milestone release",
+						        "draft": false,
+						        "prerelease": true,
+						        "created_at": "2024-01-01T10:00:00Z",
+						        "published_at": "2024-01-01T12:00:00Z",
+						        "author": {"login": "maintainer"},
+						        "html_url": "https://github.com/owner/repo/releases/tag/v1.0.0-M1"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/releases?per_page=100")).thenReturn(mockResponse);
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).prerelease()).isTrue();
+				assertThat(result.get(0).tagName()).isEqualTo("v1.0.0-M1");
+			}
+
+			@Test
+			@DisplayName("Should handle releases error gracefully")
+			void shouldHandleReleasesErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).isEmpty();
+			}
+
+			@Test
+			@DisplayName("Should handle empty releases list")
+			void shouldHandleEmptyReleasesList() {
+				when(mockHttpClient.get("/repos/owner/repo/releases?per_page=100")).thenReturn("[]");
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).isEmpty();
+			}
+
+			@Test
+			@DisplayName("Should handle release with null optional fields")
+			void shouldHandleReleaseWithNullOptionalFields() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 77777,
+						        "tag_name": "v0.1.0",
+						        "draft": false,
+						        "prerelease": false,
+						        "created_at": "2024-01-01T10:00:00Z",
+						        "author": {"login": "dev"},
+						        "html_url": "https://github.com/owner/repo/releases/tag/v0.1.0"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/releases?per_page=100")).thenReturn(mockResponse);
+
+				List<Release> result = gitHubRestService.getRepositoryReleases("owner", "repo");
+
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).tagName()).isEqualTo("v0.1.0");
+				assertThat(result.get(0).name()).isNull();
+				assertThat(result.get(0).body()).isNull();
+			}
+
+		}
+
 	}
 
 	@Nested

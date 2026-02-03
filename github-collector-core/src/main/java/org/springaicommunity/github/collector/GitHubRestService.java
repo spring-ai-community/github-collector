@@ -177,6 +177,19 @@ public class GitHubRestService implements RestService {
 	}
 
 	@Override
+	public List<Release> getRepositoryReleases(String owner, String repo) {
+		try {
+			String response = httpClient.get("/repos/" + owner + "/" + repo + "/releases?per_page=100");
+			JsonNode nodes = objectMapper.readTree(response);
+			return parseReleases(nodes);
+		}
+		catch (Exception e) {
+			logger.error("Failed to get releases for {}/{}: {}", owner, repo, e.getMessage());
+			return List.of();
+		}
+	}
+
+	@Override
 	public int getTotalPRCount(String searchQuery) {
 		try {
 			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
@@ -464,6 +477,37 @@ public class GitHubRestService implements RestService {
 		}
 		catch (Exception e) {
 			logger.warn("Failed to parse collaborator: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	private List<Release> parseReleases(JsonNode nodes) {
+		List<Release> releases = new ArrayList<>();
+		if (nodes != null && nodes.isArray()) {
+			for (JsonNode node : nodes) {
+				Release release = parseRelease(node);
+				if (release != null) {
+					releases.add(release);
+				}
+			}
+		}
+		return releases;
+	}
+
+	private @Nullable Release parseRelease(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			return new Release(node.path("id").asLong(), node.path("tag_name").asText(""),
+					node.path("name").asText(null), node.path("body").asText(null), node.path("draft").asBoolean(false),
+					node.path("prerelease").asBoolean(false), parseDateTime(node.path("created_at").asText(null)),
+					parseDateTime(node.path("published_at").asText(null)), parseAuthor(node.path("author")),
+					node.path("html_url").asText(""));
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse release: {}", e.getMessage());
 			return null;
 		}
 	}

@@ -101,6 +101,19 @@ public interface RestService {
 	List<Collaborator> getRepositoryCollaborators(String owner, String repo);
 
 	/**
+	 * Get releases for a repository.
+	 *
+	 * <p>
+	 * Returns published releases for the repository, ordered by creation date descending.
+	 * Used for H4 (External Validity) analysis - validating that issues mentioned in
+	 * release notes match their labels.
+	 * @param owner Repository owner
+	 * @param repo Repository name
+	 * @return List of releases with release notes
+	 */
+	List<Release> getRepositoryReleases(String owner, String repo);
+
+	/**
 	 * Get total PR count with search parameters.
 	 * @param searchQuery The formatted search query string
 	 * @return Total number of PRs matching the query
