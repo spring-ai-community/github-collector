@@ -7,8 +7,9 @@ import org.springaicommunity.github.collector.*;
 /**
  * GitHub Collector CLI Application
  *
- * Plain Java command-line application to collect GitHub issues and PRs from a repository.
- * No Spring dependencies - uses GitHubCollectorBuilder for service wiring.
+ * Plain Java command-line application to collect GitHub issues, PRs, and collaborators
+ * from a repository. No Spring dependencies - uses GitHubCollectorBuilder for service
+ * wiring.
  *
  * Usage: java -jar github-collector-cli.jar [OPTIONS]
  *
@@ -17,7 +18,7 @@ import org.springaicommunity.github.collector.*;
  * Examples: java -jar github-collector-cli.jar --repo spring-projects/spring-ai java -jar
  * github-collector-cli.jar --batch-size 50 --incremental java -jar
  * github-collector-cli.jar --dry-run --verbose java -jar github-collector-cli.jar --type
- * prs --pr-state merged
+ * prs --pr-state merged java -jar github-collector-cli.jar --type collaborators
  */
 public class GitHubCollectorCli {
 
@@ -56,13 +57,19 @@ public class GitHubCollectorCli {
 
 		// Execute collection based on type
 		CollectionResult result;
-		if ("prs".equals(config.collectionType)) {
-			PRCollectionService prCollector = builder.buildPRCollector();
-			result = prCollector.collectItems(createRequest(config));
-		}
-		else {
-			IssueCollectionService issueCollector = builder.buildIssueCollector();
-			result = issueCollector.collectItems(createRequest(config));
+		switch (config.collectionType) {
+			case "prs":
+				PRCollectionService prCollector = builder.buildPRCollector();
+				result = prCollector.collectItems(createRequest(config));
+				break;
+			case "collaborators":
+				CollaboratorsCollectionService collaboratorsCollector = builder.buildCollaboratorsCollector();
+				result = collaboratorsCollector.collectItems(createRequest(config));
+				break;
+			default:
+				IssueCollectionService issueCollector = builder.buildIssueCollector();
+				result = issueCollector.collectItems(createRequest(config));
+				break;
 		}
 
 		// Log results

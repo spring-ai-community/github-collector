@@ -1,11 +1,12 @@
 # GitHub Collector
 
-A Java library and CLI tool for collecting GitHub issues and pull requests with advanced filtering, batch processing, and resume support.
+A Java library and CLI tool for collecting GitHub issues, pull requests, and collaborators with advanced filtering, batch processing, and resume support.
 
 ## Features
 
-- **Issue Collection** - Collect issues with state and label filtering
+- **Issue Collection** - Collect issues with state and label filtering, including label events
 - **PR Collection** - Collect pull requests with state filtering and soft approval detection
+- **Collaborator Collection** - Collect repository collaborators with permissions for maintainer identification
 - **Batch Processing** - Configurable batch sizes with automatic file splitting
 - **Resume Support** - Resume interrupted collections from the last successful batch
 - **Rate Limit Management** - Automatic handling of GitHub API rate limits
@@ -66,9 +67,9 @@ FILTERING OPTIONS:
     -l, --labels <labels>   Comma-separated list of labels to filter by
     --label-mode <mode>     Label matching: any, all (default: any)
 
-PR COLLECTION OPTIONS:
-    -t, --type <type>       Collection type: issues, prs (default: issues)
-    -n, --number <num>      Specific PR number to collect
+COLLECTION TYPE OPTIONS:
+    -t, --type <type>       Collection type: issues, prs, collaborators (default: issues)
+    -n, --number <num>      Specific PR number to collect (when type=prs)
     --pr-state <state>      PR state: open, closed, merged, all (default: open)
 
 LIMITING AND SORTING:
@@ -111,6 +112,13 @@ java -jar github-collector-cli.jar --repo spring-projects/spring-ai \
 ```bash
 java -jar github-collector-cli.jar --repo spring-projects/spring-ai \
     --type prs --number 1234
+```
+
+### Collect repository collaborators
+
+```bash
+java -jar github-collector-cli.jar --repo spring-projects/spring-ai \
+    --type collaborators
 ```
 
 ### Dry run to preview collection
@@ -160,11 +168,15 @@ CollectionResult result = issueCollector.collectItems(request);
 // Collect PRs
 PRCollectionService prCollector = builder.buildPRCollector();
 CollectionResult prResult = prCollector.collectItems(request);
+
+// Collect collaborators
+CollaboratorsCollectionService collaboratorsCollector = builder.buildCollaboratorsCollector();
+CollectionResult collaboratorsResult = collaboratorsCollector.collectItems(request);
 ```
 
 ## Output Format
 
-Collections are saved as JSON files in the `github-issues/` or `github-prs/` directory:
+Collections are saved as JSON files in the `github-issues/`, `github-prs/`, or `github-collaborators/` directory:
 
 ```
 github-issues/

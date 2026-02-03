@@ -144,9 +144,9 @@ public class ArgumentParser {
 
 				case "-t", "--type":
 					String collectionType = getRequiredValue(args, i, "type").toLowerCase();
-					if (!List.of("issues", "prs").contains(collectionType)) {
-						throw new IllegalArgumentException(
-								"Invalid collection type '" + collectionType + "': must be 'issues' or 'prs'");
+					if (!List.of("issues", "prs", "collaborators").contains(collectionType)) {
+						throw new IllegalArgumentException("Invalid collection type '" + collectionType
+								+ "': must be 'issues', 'prs', or 'collaborators'");
 					}
 					config.collectionType = collectionType;
 					i++; // Skip next argument since we consumed it
@@ -254,8 +254,8 @@ public class ArgumentParser {
 			.append(")\n");
 		help.append("                           Note: 'any' mode uses first label only due to API limitations\n");
 		help.append("\n");
-		help.append("COLLECTION TYPE OPTIONS (Phase 2: PR Collection):\n");
-		help.append("    -t, --type <type>       Collection type: issues, prs (default: issues)\n");
+		help.append("COLLECTION TYPE OPTIONS:\n");
+		help.append("    -t, --type <type>       Collection type: issues, prs, collaborators (default: issues)\n");
 		help.append("    -n, --number <number>   Specific PR number to collect (when type=prs)\n");
 		help.append("    --pr-state <state>      PR state: open, closed, merged, all (default: open)\n");
 		help.append("\n");
@@ -297,10 +297,14 @@ public class ArgumentParser {
 		help.append(
 				"    ./collect_github_issues.java --max-issues 10 --sort-by comments --sort-order desc --labels bug\n");
 		help.append("\n");
-		help.append("    # PR collection (Phase 2 Enhancement)\n");
+		help.append("    # PR collection\n");
 		help.append("    ./collect_github_issues.java --type prs --repo spring-projects/spring-ai\n");
 		help.append("    ./collect_github_issues.java --type prs --number 4347 --dry-run  # Specific PR\n");
 		help.append("    ./collect_github_issues.java --type prs --pr-state merged --max-issues 10\n");
+		help.append("\n");
+		help.append("    # Collaborator collection (for maintainer identification)\n");
+		help.append("    ./collect_github_issues.java --type collaborators --repo spring-projects/spring-ai\n");
+		help.append("    ./collect_github_issues.java --type collaborators --repo owner/repo --dry-run\n");
 		help.append("\n");
 		help.append("OUTPUT OPTIONS:\n");
 		help.append("    --single-file           Output all results to a single JSON file\n");
@@ -365,8 +369,9 @@ public class ArgumentParser {
 		}
 
 		// Validate collection type
-		if (!List.of("issues", "prs").contains(config.collectionType.toLowerCase())) {
-			errors.add("Invalid collection type: " + config.collectionType + " (must be 'issues' or 'prs')");
+		if (!List.of("issues", "prs", "collaborators").contains(config.collectionType.toLowerCase())) {
+			errors.add("Invalid collection type: " + config.collectionType
+					+ " (must be 'issues', 'prs', or 'collaborators')");
 		}
 
 		// Validate PR-specific parameters

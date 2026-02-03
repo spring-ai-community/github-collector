@@ -129,4 +129,42 @@ class SimpleIntegrationIT {
 		}
 	}
 
+	@Test
+	@DisplayName("Issue events REST API connectivity test")
+	void issueEventsApiConnectivityTest() {
+		// Test that we can fetch issue events via REST API
+		assertThatCode(() -> {
+			// Use a known issue number from spring-ai that should have some events
+			List<IssueEvent> events = restService.getIssueEvents("spring-projects", "spring-ai", 1);
+			// Just verify the API call works - events may be empty for old issues
+			assertThat(events).isNotNull();
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("Collaborators REST API connectivity test")
+	void collaboratorsApiConnectivityTest() {
+		// Test that we can fetch collaborators via REST API
+		// Note: This may return empty list if the token doesn't have sufficient
+		// permissions
+		assertThatCode(() -> {
+			List<Collaborator> collaborators = restService.getRepositoryCollaborators("spring-projects", "spring-ai");
+			// Just verify the API call works without throwing
+			assertThat(collaborators).isNotNull();
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("CollaboratorsCollectionService buildable test")
+	void collaboratorsCollectionServiceBuildableTest() {
+		// Test that CollaboratorsCollectionService can be built via builder
+		assertThatCode(() -> {
+			CollaboratorsCollectionService collaboratorsService = GitHubCollectorBuilder.create()
+				.tokenFromEnv()
+				.objectMapper(objectMapper)
+				.buildCollaboratorsCollector();
+			assertThat(collaboratorsService).isNotNull();
+		}).doesNotThrowAnyException();
+	}
+
 }
