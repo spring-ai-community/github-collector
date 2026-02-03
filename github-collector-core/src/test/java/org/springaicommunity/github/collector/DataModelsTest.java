@@ -249,6 +249,69 @@ class DataModelsTest {
 		}
 
 		@Test
+		@DisplayName("Should create Release record with all fields")
+		void shouldCreateRelease() {
+			// Given
+			Author author = new Author("releasemanager", "Release Manager");
+			long id = 123456L;
+			String tagName = "v1.0.0";
+			String name = "Spring AI 1.0.0 GA";
+			String body = "## What's New\n\n- Feature A\n- Bug fix #123\n\n## Bug Fixes\n\n- Fixed #456";
+			boolean draft = false;
+			boolean prerelease = false;
+			LocalDateTime createdAt = LocalDateTime.of(2023, 6, 15, 10, 0);
+			LocalDateTime publishedAt = LocalDateTime.of(2023, 6, 15, 12, 0);
+			String htmlUrl = "https://github.com/spring-projects/spring-ai/releases/tag/v1.0.0";
+
+			// When
+			Release release = new Release(id, tagName, name, body, draft, prerelease, createdAt, publishedAt, author,
+					htmlUrl);
+
+			// Then
+			assertThat(release.id()).isEqualTo(id);
+			assertThat(release.tagName()).isEqualTo(tagName);
+			assertThat(release.name()).isEqualTo(name);
+			assertThat(release.body()).isEqualTo(body);
+			assertThat(release.draft()).isFalse();
+			assertThat(release.prerelease()).isFalse();
+			assertThat(release.createdAt()).isEqualTo(createdAt);
+			assertThat(release.publishedAt()).isEqualTo(publishedAt);
+			assertThat(release.author()).isEqualTo(author);
+			assertThat(release.htmlUrl()).isEqualTo(htmlUrl);
+		}
+
+		@Test
+		@DisplayName("Should create Release record for draft release")
+		void shouldCreateDraftRelease() {
+			// Given
+			Author author = new Author("releasemanager", "Release Manager");
+
+			// When - draft release has no publishedAt
+			Release release = new Release(789L, "v2.0.0-SNAPSHOT", "2.0.0 Development", "Work in progress", true, false,
+					LocalDateTime.now(), null, author, "https://github.com/owner/repo/releases/tag/v2.0.0-SNAPSHOT");
+
+			// Then
+			assertThat(release.draft()).isTrue();
+			assertThat(release.publishedAt()).isNull();
+		}
+
+		@Test
+		@DisplayName("Should create Release record for prerelease")
+		void shouldCreatePrereleaseRelease() {
+			// Given
+			Author author = new Author("releasemanager", "Release Manager");
+
+			// When
+			Release release = new Release(456L, "v1.0.0-M1", "Spring AI 1.0.0 Milestone 1", "Milestone release", false,
+					true, LocalDateTime.now(), LocalDateTime.now(), author,
+					"https://github.com/owner/repo/releases/tag/v1.0.0-M1");
+
+			// Then
+			assertThat(release.prerelease()).isTrue();
+			assertThat(release.draft()).isFalse();
+		}
+
+		@Test
 		@DisplayName("Should create Issue record with all fields")
 		void shouldCreateIssue() {
 			// Given
@@ -693,6 +756,45 @@ class DataModelsTest {
 			assertThat(deserialized.mergeCommitSha()).isNull();
 			assertThat(deserialized.draft()).isTrue();
 			assertThat(deserialized.merged()).isFalse();
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize Release record")
+		void shouldSerializeDeserializeRelease() throws JsonProcessingException {
+			// Given
+			Author author = new Author("releasemanager", "Release Manager");
+			Release original = new Release(123456L, "v1.0.0", "Spring AI 1.0.0", "Release notes with #123 fix", false,
+					false, LocalDateTime.of(2023, 6, 15, 10, 0), LocalDateTime.of(2023, 6, 15, 12, 0), author,
+					"https://github.com/owner/repo/releases/tag/v1.0.0");
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			Release deserialized = objectMapper.readValue(json, Release.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("v1.0.0");
+			assertThat(json).contains("Spring AI 1.0.0");
+			assertThat(json).contains("releasemanager");
+		}
+
+		@Test
+		@DisplayName("Should handle null values in Release record")
+		void shouldHandleNullValuesInRelease() throws JsonProcessingException {
+			// Given - draft release with minimal fields
+			Author author = new Author("user", null);
+			Release original = new Release(789L, "v2.0.0-dev", null, null, true, false, LocalDateTime.now(), null,
+					author, "https://github.com/owner/repo/releases/tag/v2.0.0-dev");
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			Release deserialized = objectMapper.readValue(json, Release.class);
+
+			// Then
+			assertThat(deserialized.name()).isNull();
+			assertThat(deserialized.body()).isNull();
+			assertThat(deserialized.publishedAt()).isNull();
+			assertThat(deserialized.draft()).isTrue();
 		}
 
 		@Test
