@@ -17,19 +17,23 @@ import java.time.LocalDateTime;
  * <ul>
  * <li>{@code labeled} - A label was added to the issue</li>
  * <li>{@code unlabeled} - A label was removed from the issue</li>
- * <li>{@code closed} - The issue was closed</li>
+ * <li>{@code closed} - The issue was closed (may include commit_id if closed by PR)</li>
  * <li>{@code reopened} - The issue was reopened</li>
  * <li>{@code assigned} - A user was assigned to the issue</li>
  * <li>{@code unassigned} - A user was unassigned from the issue</li>
+ * <li>{@code referenced} - The issue was referenced by a commit</li>
  * </ul>
  *
  * @param id the unique event identifier
  * @param event the event type (e.g., "labeled", "unlabeled", "closed")
  * @param actor the user who triggered the event
  * @param label the label involved (only present for "labeled" and "unlabeled" events)
+ * @param commitId the commit SHA that triggered this event (present for "closed" and
+ * "referenced" events when issue was closed/referenced by a commit)
  * @param createdAt when the event occurred
  * @see <a href="https://docs.github.com/en/rest/issues/events">GitHub Issue Events
  * API</a>
  */
-public record IssueEvent(long id, String event, Author actor, @Nullable Label label, LocalDateTime createdAt) {
+public record IssueEvent(long id, String event, Author actor, @Nullable Label label, @Nullable String commitId,
+		LocalDateTime createdAt) {
 }

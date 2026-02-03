@@ -117,13 +117,14 @@ class DataModelsTest {
 			LocalDateTime createdAt = LocalDateTime.of(2023, 1, 15, 10, 30);
 
 			// When
-			IssueEvent issueEvent = new IssueEvent(id, event, actor, label, createdAt);
+			IssueEvent issueEvent = new IssueEvent(id, event, actor, label, null, createdAt);
 
 			// Then
 			assertThat(issueEvent.id()).isEqualTo(id);
 			assertThat(issueEvent.event()).isEqualTo(event);
 			assertThat(issueEvent.actor()).isEqualTo(actor);
 			assertThat(issueEvent.label()).isEqualTo(label);
+			assertThat(issueEvent.commitId()).isNull();
 			assertThat(issueEvent.createdAt()).isEqualTo(createdAt);
 		}
 
@@ -134,16 +135,18 @@ class DataModelsTest {
 			Author actor = new Author("maintainer", "Project Maintainer");
 			long id = 98766L;
 			String event = "closed";
+			String commitId = "abc123def456";
 			LocalDateTime createdAt = LocalDateTime.of(2023, 1, 15, 11, 0);
 
 			// When
-			IssueEvent issueEvent = new IssueEvent(id, event, actor, null, createdAt);
+			IssueEvent issueEvent = new IssueEvent(id, event, actor, null, commitId, createdAt);
 
 			// Then
 			assertThat(issueEvent.id()).isEqualTo(id);
 			assertThat(issueEvent.event()).isEqualTo(event);
 			assertThat(issueEvent.actor()).isEqualTo(actor);
 			assertThat(issueEvent.label()).isNull();
+			assertThat(issueEvent.commitId()).isEqualTo(commitId);
 			assertThat(issueEvent.createdAt()).isEqualTo(createdAt);
 		}
 
@@ -319,7 +322,7 @@ class DataModelsTest {
 			Author maintainer = new Author("maintainer", "Maintainer");
 			Label bugLabel = new Label("bug", "d73a49", "Bug label");
 			Comment comment = new Comment(author, "Test comment", LocalDateTime.now());
-			IssueEvent labelEvent = new IssueEvent(98765L, "labeled", maintainer, bugLabel,
+			IssueEvent labelEvent = new IssueEvent(98765L, "labeled", maintainer, bugLabel, null,
 					LocalDateTime.of(2023, 1, 15, 11, 0));
 
 			int number = 123;
@@ -649,7 +652,7 @@ class DataModelsTest {
 			// Given
 			Author actor = new Author("maintainer", "Project Maintainer");
 			Label label = new Label("bug", "d73a49", "Bug fix label");
-			IssueEvent original = new IssueEvent(98765L, "labeled", actor, label,
+			IssueEvent original = new IssueEvent(98765L, "labeled", actor, label, null,
 					LocalDateTime.of(2023, 1, 15, 10, 30));
 
 			// When
@@ -668,7 +671,8 @@ class DataModelsTest {
 		void shouldSerializeDeserializeIssueEventWithoutLabel() throws JsonProcessingException {
 			// Given
 			Author actor = new Author("maintainer", "Project Maintainer");
-			IssueEvent original = new IssueEvent(98766L, "closed", actor, null, LocalDateTime.of(2023, 1, 15, 11, 0));
+			IssueEvent original = new IssueEvent(98766L, "closed", actor, null, "abc123def456",
+					LocalDateTime.of(2023, 1, 15, 11, 0));
 
 			// When
 			String json = objectMapper.writeValueAsString(original);

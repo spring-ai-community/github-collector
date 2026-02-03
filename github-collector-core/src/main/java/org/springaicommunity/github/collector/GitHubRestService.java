@@ -436,7 +436,10 @@ public class GitHubRestService implements RestService {
 				}
 			}
 
-			return new IssueEvent(node.path("id").asLong(), eventType, parseAuthor(node.path("actor")), label,
+			// Extract commit_id (present for "closed" and "referenced" events)
+			String commitId = node.path("commit_id").asText(null);
+
+			return new IssueEvent(node.path("id").asLong(), eventType, parseAuthor(node.path("actor")), label, commitId,
 					parseDateTime(node.path("created_at").asText(null)));
 		}
 		catch (Exception e) {
