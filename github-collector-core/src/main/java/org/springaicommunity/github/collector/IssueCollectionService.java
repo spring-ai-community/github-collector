@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -96,8 +97,74 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 
 	@Override
 	protected List<Issue> processItemBatch(List<Issue> batch, String owner, String repo, CollectionRequest request) {
-		// Issues don't need additional processing
-		return batch;
+		return enhanceIssuesWithEvents(batch, owner, repo, request.verbose());
+	}
+
+	/**
+	 * Enhance issues with timeline events (label changes, state changes, etc.).
+	 *
+	 * <p>
+	 * Fetches events for each issue via the REST API and creates new Issue records with
+	 * the events populated. This is essential for tracking label authority (who applied
+	 * labels) and label stability (label churn after issue closure).
+	 */
+	private List<Issue> enhanceIssuesWithEvents(List<Issue> issues, String owner, String repo, boolean verbose) {
+		List<Issue> enhancedIssues = new ArrayList<>();
+		int total = issues.size();
+
+		if (verbose) {
+			logger.info("Fetching events for {} issues...", total);
+		}
+
+		for (int i = 0; i < issues.size(); i++) {
+			Issue issue = issues.get(i);
+			try {
+				int issueNumber = issue.number();
+				if (issueNumber > 0) {
+					if (verbose) {
+						String issueTitle = issue.title();
+						logger.info("  Fetching events for issue #{} ({}/{}) - {}", issueNumber, i + 1, total,
+								issueTitle.length() > 60 ? issueTitle.substring(0, 60) + "..." : issueTitle);
+					}
+
+					// Get events for this issue
+					List<IssueEvent> events = restService.getIssueEvents(owner, repo, issueNumber);
+
+					// Create enhanced issue with events
+					Issue enhancedIssue = new Issue(issue.number(), issue.title(), issue.body(), issue.state(),
+							issue.createdAt(), issue.updatedAt(), issue.closedAt(), issue.url(), issue.author(),
+							issue.comments(), issue.labels(), events);
+
+					enhancedIssues.add(enhancedIssue);
+
+					if (verbose) {
+						long labelEventCount = events.stream()
+							.filter(e -> "labeled".equals(e.event()) || "unlabeled".equals(e.event()))
+							.count();
+						if (labelEventCount > 0) {
+							logger.info("    Found {} label events", labelEventCount);
+						}
+					}
+				}
+				else {
+					enhancedIssues.add(issue);
+				}
+			}
+			catch (Exception e) {
+				logger.warn("Failed to fetch events for issue #{}: {}", issue.number(), e.getMessage());
+				enhancedIssues.add(issue);
+			}
+		}
+
+		if (verbose) {
+			long totalLabelEvents = enhancedIssues.stream()
+				.flatMap(i -> i.events().stream())
+				.filter(e -> "labeled".equals(e.event()) || "unlabeled".equals(e.event()))
+				.count();
+			logger.info("Completed event fetching: {} total label events across {} issues", totalLabelEvents, total);
+		}
+
+		return enhancedIssues;
 	}
 
 	@Override

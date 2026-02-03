@@ -157,12 +157,14 @@ public class GitHubGraphQLService implements GraphQLService {
 		}
 
 		try {
+			// Events are not available via GraphQL - they will be fetched via REST API
+			// in IssueCollectionService.processItemBatch()
 			return new Issue(node.path("number").asInt(), node.path("title").asText(""), node.path("body").asText(null),
 					node.path("state").asText(""), parseDateTime(node.path("createdAt").asText(null)),
 					parseDateTime(node.path("updatedAt").asText(null)),
 					parseDateTime(node.path("closedAt").asText(null)), node.path("url").asText(""),
 					parseAuthor(node.path("author")), parseComments(node.path("comments").path("nodes")),
-					parseLabels(node.path("labels").path("nodes")));
+					parseLabels(node.path("labels").path("nodes")), List.of());
 		}
 		catch (Exception e) {
 			logger.warn("Failed to parse issue: {}", e.getMessage());

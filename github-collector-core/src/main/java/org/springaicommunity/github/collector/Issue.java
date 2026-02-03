@@ -23,8 +23,9 @@ import java.util.List;
  * @param author the user who created the issue
  * @param comments list of comments on this issue
  * @param labels list of labels assigned to this issue
+ * @param events list of timeline events (label changes, state changes, etc.)
  */
 public record Issue(int number, String title, @Nullable String body, String state, LocalDateTime createdAt,
 		LocalDateTime updatedAt, @Nullable LocalDateTime closedAt, String url, Author author, List<Comment> comments,
-		List<Label> labels) {
+		List<Label> labels, List<IssueEvent> events) {
 }

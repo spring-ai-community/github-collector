@@ -253,8 +253,11 @@ class DataModelsTest {
 		void shouldCreateIssue() {
 			// Given
 			Author author = new Author("issueauthor", "Issue Author");
+			Author maintainer = new Author("maintainer", "Maintainer");
 			Label bugLabel = new Label("bug", "d73a49", "Bug label");
 			Comment comment = new Comment(author, "Test comment", LocalDateTime.now());
+			IssueEvent labelEvent = new IssueEvent(98765L, "labeled", maintainer, bugLabel,
+					LocalDateTime.of(2023, 1, 15, 11, 0));
 
 			int number = 123;
 			String title = "Test Issue";
@@ -266,10 +269,11 @@ class DataModelsTest {
 			String url = "https://github.com/repo/issues/123";
 			List<Comment> comments = List.of(comment);
 			List<Label> labels = List.of(bugLabel);
+			List<IssueEvent> events = List.of(labelEvent);
 
 			// When
 			Issue issue = new Issue(number, title, body, state, createdAt, updatedAt, closedAt, url, author, comments,
-					labels);
+					labels, events);
 
 			// Then
 			assertThat(issue.number()).isEqualTo(number);
@@ -283,6 +287,7 @@ class DataModelsTest {
 			assertThat(issue.author()).isEqualTo(author);
 			assertThat(issue.comments()).containsExactly(comment);
 			assertThat(issue.labels()).containsExactly(bugLabel);
+			assertThat(issue.events()).containsExactly(labelEvent);
 		}
 
 	}
@@ -449,7 +454,7 @@ class DataModelsTest {
 			// Given
 			int batchNumber = 5;
 			Issue issue = new Issue(123, "Test", "Body", "closed", LocalDateTime.now(), LocalDateTime.now(),
-					LocalDateTime.now(), "url", new Author("user", "User"), List.of(), List.of());
+					LocalDateTime.now(), "url", new Author("user", "User"), List.of(), List.of(), List.of());
 			List<Issue> issues = List.of(issue);
 			String timestamp = "2023-01-15T10:30:00";
 
@@ -695,7 +700,7 @@ class DataModelsTest {
 		void shouldHandleNullValuesInIssue() throws JsonProcessingException {
 			// Given
 			Issue original = new Issue(123, "Test Issue", null, "open", LocalDateTime.now(), LocalDateTime.now(), null,
-					"url", new Author("user", null), List.of(), List.of());
+					"url", new Author("user", null), List.of(), List.of(), List.of());
 
 			// When
 			String json = objectMapper.writeValueAsString(original);
@@ -705,6 +710,7 @@ class DataModelsTest {
 			assertThat(deserialized.body()).isNull();
 			assertThat(deserialized.closedAt()).isNull();
 			assertThat(deserialized.author().name()).isNull();
+			assertThat(deserialized.events()).isEmpty();
 		}
 
 	}
