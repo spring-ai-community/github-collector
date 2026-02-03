@@ -148,6 +148,47 @@ class DataModelsTest {
 		}
 
 		@Test
+		@DisplayName("Should create Collaborator record with permissions")
+		void shouldCreateCollaboratorWithPermissions() {
+			// Given
+			String login = "maintainer";
+			long id = 12345L;
+			String type = "User";
+			Collaborator.Permissions permissions = new Collaborator.Permissions(true, true, true, true, true);
+			String roleName = "admin";
+
+			// When
+			Collaborator collaborator = new Collaborator(login, id, type, permissions, roleName);
+
+			// Then
+			assertThat(collaborator.login()).isEqualTo(login);
+			assertThat(collaborator.id()).isEqualTo(id);
+			assertThat(collaborator.type()).isEqualTo(type);
+			assertThat(collaborator.permissions()).isNotNull();
+			assertThat(collaborator.permissions().admin()).isTrue();
+			assertThat(collaborator.permissions().push()).isTrue();
+			assertThat(collaborator.roleName()).isEqualTo(roleName);
+		}
+
+		@Test
+		@DisplayName("Should create Collaborator record with write permissions only")
+		void shouldCreateCollaboratorWithWritePermissions() {
+			// Given
+			Collaborator.Permissions permissions = new Collaborator.Permissions(false, false, true, true, true);
+
+			// When
+			Collaborator collaborator = new Collaborator("contributor", 67890L, "User", permissions, "write");
+
+			// Then
+			assertThat(collaborator.permissions().admin()).isFalse();
+			assertThat(collaborator.permissions().maintain()).isFalse();
+			assertThat(collaborator.permissions().push()).isTrue();
+			assertThat(collaborator.permissions().triage()).isTrue();
+			assertThat(collaborator.permissions().pull()).isTrue();
+			assertThat(collaborator.roleName()).isEqualTo("write");
+		}
+
+		@Test
 		@DisplayName("Should create PullRequest record with all fields")
 		void shouldCreatePullRequest() {
 			// Given
@@ -569,6 +610,40 @@ class DataModelsTest {
 			assertThat(deserialized).isEqualTo(original);
 			assertThat(json).contains("closed");
 			assertThat(deserialized.label()).isNull();
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize Collaborator record")
+		void shouldSerializeDeserializeCollaborator() throws JsonProcessingException {
+			// Given
+			Collaborator.Permissions permissions = new Collaborator.Permissions(true, true, true, true, true);
+			Collaborator original = new Collaborator("maintainer", 12345L, "User", permissions, "admin");
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			Collaborator deserialized = objectMapper.readValue(json, Collaborator.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("maintainer");
+			assertThat(json).contains("admin");
+			assertThat(deserialized.permissions().admin()).isTrue();
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize Collaborator.Permissions record")
+		void shouldSerializeDeserializePermissions() throws JsonProcessingException {
+			// Given
+			Collaborator.Permissions original = new Collaborator.Permissions(false, false, true, true, true);
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			Collaborator.Permissions deserialized = objectMapper.readValue(json, Collaborator.Permissions.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(deserialized.admin()).isFalse();
+			assertThat(deserialized.push()).isTrue();
 		}
 
 		@Test
