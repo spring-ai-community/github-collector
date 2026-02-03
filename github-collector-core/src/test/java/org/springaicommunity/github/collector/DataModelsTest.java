@@ -107,6 +107,47 @@ class DataModelsTest {
 		}
 
 		@Test
+		@DisplayName("Should create IssueEvent record with label")
+		void shouldCreateIssueEventWithLabel() {
+			// Given
+			Author actor = new Author("maintainer", "Project Maintainer");
+			Label label = new Label("bug", "d73a49", "Something isn't working");
+			long id = 98765L;
+			String event = "labeled";
+			LocalDateTime createdAt = LocalDateTime.of(2023, 1, 15, 10, 30);
+
+			// When
+			IssueEvent issueEvent = new IssueEvent(id, event, actor, label, createdAt);
+
+			// Then
+			assertThat(issueEvent.id()).isEqualTo(id);
+			assertThat(issueEvent.event()).isEqualTo(event);
+			assertThat(issueEvent.actor()).isEqualTo(actor);
+			assertThat(issueEvent.label()).isEqualTo(label);
+			assertThat(issueEvent.createdAt()).isEqualTo(createdAt);
+		}
+
+		@Test
+		@DisplayName("Should create IssueEvent record without label for non-label events")
+		void shouldCreateIssueEventWithoutLabel() {
+			// Given
+			Author actor = new Author("maintainer", "Project Maintainer");
+			long id = 98766L;
+			String event = "closed";
+			LocalDateTime createdAt = LocalDateTime.of(2023, 1, 15, 11, 0);
+
+			// When
+			IssueEvent issueEvent = new IssueEvent(id, event, actor, null, createdAt);
+
+			// Then
+			assertThat(issueEvent.id()).isEqualTo(id);
+			assertThat(issueEvent.event()).isEqualTo(event);
+			assertThat(issueEvent.actor()).isEqualTo(actor);
+			assertThat(issueEvent.label()).isNull();
+			assertThat(issueEvent.createdAt()).isEqualTo(createdAt);
+		}
+
+		@Test
 		@DisplayName("Should create PullRequest record with all fields")
 		void shouldCreatePullRequest() {
 			// Given
@@ -491,6 +532,43 @@ class DataModelsTest {
 			assertThat(json).contains("APPROVED");
 			assertThat(json).contains("MEMBER");
 			assertThat(json).contains("reviewer");
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize IssueEvent record with label")
+		void shouldSerializeDeserializeIssueEventWithLabel() throws JsonProcessingException {
+			// Given
+			Author actor = new Author("maintainer", "Project Maintainer");
+			Label label = new Label("bug", "d73a49", "Bug fix label");
+			IssueEvent original = new IssueEvent(98765L, "labeled", actor, label,
+					LocalDateTime.of(2023, 1, 15, 10, 30));
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			IssueEvent deserialized = objectMapper.readValue(json, IssueEvent.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("labeled");
+			assertThat(json).contains("maintainer");
+			assertThat(json).contains("bug");
+		}
+
+		@Test
+		@DisplayName("Should serialize and deserialize IssueEvent record without label")
+		void shouldSerializeDeserializeIssueEventWithoutLabel() throws JsonProcessingException {
+			// Given
+			Author actor = new Author("maintainer", "Project Maintainer");
+			IssueEvent original = new IssueEvent(98766L, "closed", actor, null, LocalDateTime.of(2023, 1, 15, 11, 0));
+
+			// When
+			String json = objectMapper.writeValueAsString(original);
+			IssueEvent deserialized = objectMapper.readValue(json, IssueEvent.class);
+
+			// Then
+			assertThat(deserialized).isEqualTo(original);
+			assertThat(json).contains("closed");
+			assertThat(deserialized.label()).isNull();
 		}
 
 		@Test
