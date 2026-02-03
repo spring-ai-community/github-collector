@@ -151,6 +151,32 @@ public class GitHubRestService implements RestService {
 	}
 
 	@Override
+	public List<IssueEvent> getIssueEvents(String owner, String repo, int issueNumber) {
+		try {
+			String response = httpClient.get("/repos/" + owner + "/" + repo + "/issues/" + issueNumber + "/events");
+			JsonNode nodes = objectMapper.readTree(response);
+			return parseIssueEvents(nodes);
+		}
+		catch (Exception e) {
+			logger.error("Failed to get events for issue {}: {}", issueNumber, e.getMessage());
+			return List.of();
+		}
+	}
+
+	@Override
+	public List<Collaborator> getRepositoryCollaborators(String owner, String repo) {
+		try {
+			String response = httpClient.get("/repos/" + owner + "/" + repo + "/collaborators?per_page=100");
+			JsonNode nodes = objectMapper.readTree(response);
+			return parseCollaborators(nodes);
+		}
+		catch (Exception e) {
+			logger.error("Failed to get collaborators for {}/{}: {}", owner, repo, e.getMessage());
+			return List.of();
+		}
+	}
+
+	@Override
 	public int getTotalPRCount(String searchQuery) {
 		try {
 			String encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
@@ -362,6 +388,82 @@ public class GitHubRestService implements RestService {
 		}
 		catch (DateTimeParseException e) {
 			logger.warn("Failed to parse datetime: {}", dateTimeStr);
+			return null;
+		}
+	}
+
+	private List<IssueEvent> parseIssueEvents(JsonNode nodes) {
+		List<IssueEvent> events = new ArrayList<>();
+		if (nodes != null && nodes.isArray()) {
+			for (JsonNode node : nodes) {
+				IssueEvent event = parseIssueEvent(node);
+				if (event != null) {
+					events.add(event);
+				}
+			}
+		}
+		return events;
+	}
+
+	private @Nullable IssueEvent parseIssueEvent(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			String eventType = node.path("event").asText("");
+			Label label = null;
+
+			// Only "labeled" and "unlabeled" events have a label field
+			if ("labeled".equals(eventType) || "unlabeled".equals(eventType)) {
+				JsonNode labelNode = node.path("label");
+				if (!labelNode.isMissingNode() && !labelNode.isNull()) {
+					label = new Label(labelNode.path("name").asText(""), labelNode.path("color").asText(null),
+							labelNode.path("description").asText(null));
+				}
+			}
+
+			return new IssueEvent(node.path("id").asLong(), eventType, parseAuthor(node.path("actor")), label,
+					parseDateTime(node.path("created_at").asText(null)));
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse issue event: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	private List<Collaborator> parseCollaborators(JsonNode nodes) {
+		List<Collaborator> collaborators = new ArrayList<>();
+		if (nodes != null && nodes.isArray()) {
+			for (JsonNode node : nodes) {
+				Collaborator collaborator = parseCollaborator(node);
+				if (collaborator != null) {
+					collaborators.add(collaborator);
+				}
+			}
+		}
+		return collaborators;
+	}
+
+	private @Nullable Collaborator parseCollaborator(JsonNode node) {
+		if (node == null || node.isMissingNode() || node.isNull()) {
+			return null;
+		}
+
+		try {
+			Collaborator.Permissions permissions = null;
+			JsonNode permNode = node.path("permissions");
+			if (!permNode.isMissingNode() && !permNode.isNull()) {
+				permissions = new Collaborator.Permissions(permNode.path("admin").asBoolean(false),
+						permNode.path("maintain").asBoolean(false), permNode.path("push").asBoolean(false),
+						permNode.path("triage").asBoolean(false), permNode.path("pull").asBoolean(false));
+			}
+
+			return new Collaborator(node.path("login").asText(""), node.path("id").asLong(),
+					node.path("type").asText("User"), permissions, node.path("role_name").asText(null));
+		}
+		catch (Exception e) {
+			logger.warn("Failed to parse collaborator: {}", e.getMessage());
 			return null;
 		}
 	}

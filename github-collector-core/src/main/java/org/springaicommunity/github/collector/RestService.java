@@ -75,6 +75,32 @@ public interface RestService {
 	List<Review> getPullRequestReviews(String owner, String repo, int prNumber);
 
 	/**
+	 * Get events for a specific issue.
+	 *
+	 * <p>
+	 * Returns timeline events for an issue including label changes (labeled/unlabeled),
+	 * state changes (closed/reopened), assignments, and more. Essential for tracking who
+	 * applied labels and when.
+	 * @param owner Repository owner
+	 * @param repo Repository name
+	 * @param issueNumber Issue number
+	 * @return List of issue events
+	 */
+	List<IssueEvent> getIssueEvents(String owner, String repo, int issueNumber);
+
+	/**
+	 * Get collaborators for a repository.
+	 *
+	 * <p>
+	 * Returns users who have been granted access to the repository. Used to identify
+	 * maintainers (users with push access or higher) for label authority analysis.
+	 * @param owner Repository owner
+	 * @param repo Repository name
+	 * @return List of collaborators with their permissions
+	 */
+	List<Collaborator> getRepositoryCollaborators(String owner, String repo);
+
+	/**
 	 * Get total PR count with search parameters.
 	 * @param searchQuery The formatted search query string
 	 * @return Total number of PRs matching the query

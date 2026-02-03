@@ -490,6 +490,185 @@ class GitHubServicesTest {
 
 		}
 
+		@Nested
+		@DisplayName("Issue Events API Tests")
+		class IssueEventsAPITest {
+
+			@Test
+			@DisplayName("Should get issue events with label events")
+			void shouldGetIssueEventsWithLabelEvents() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 12345,
+						        "event": "labeled",
+						        "actor": {"login": "maintainer"},
+						        "label": {"name": "bug", "color": "d73a49", "description": "Something isn't working"},
+						        "created_at": "2024-01-15T10:30:00Z"
+						    },
+						    {
+						        "id": 12346,
+						        "event": "closed",
+						        "actor": {"login": "author"},
+						        "created_at": "2024-01-15T11:00:00Z"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/issues/123/events")).thenReturn(mockResponse);
+
+				List<IssueEvent> result = gitHubRestService.getIssueEvents("owner", "repo", 123);
+
+				assertThat(result).hasSize(2);
+				assertThat(result.get(0).event()).isEqualTo("labeled");
+				assertThat(result.get(0).actor().login()).isEqualTo("maintainer");
+				assertThat(result.get(0).label()).isNotNull();
+				assertThat(result.get(0).label().name()).isEqualTo("bug");
+				assertThat(result.get(1).event()).isEqualTo("closed");
+				assertThat(result.get(1).label()).isNull();
+			}
+
+			@Test
+			@DisplayName("Should handle unlabeled events")
+			void shouldHandleUnlabeledEvents() {
+				String mockResponse = """
+						[
+						    {
+						        "id": 12347,
+						        "event": "unlabeled",
+						        "actor": {"login": "reviewer"},
+						        "label": {"name": "enhancement", "color": "a2eeef"},
+						        "created_at": "2024-01-15T12:00:00Z"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/issues/456/events")).thenReturn(mockResponse);
+
+				List<IssueEvent> result = gitHubRestService.getIssueEvents("owner", "repo", 456);
+
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).event()).isEqualTo("unlabeled");
+				assertThat(result.get(0).label()).isNotNull();
+				assertThat(result.get(0).label().name()).isEqualTo("enhancement");
+			}
+
+			@Test
+			@DisplayName("Should handle issue events error gracefully")
+			void shouldHandleIssueEventsErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
+
+				List<IssueEvent> result = gitHubRestService.getIssueEvents("owner", "repo", 123);
+
+				assertThat(result).isEmpty();
+			}
+
+			@Test
+			@DisplayName("Should handle empty events list")
+			void shouldHandleEmptyEventsList() {
+				when(mockHttpClient.get("/repos/owner/repo/issues/789/events")).thenReturn("[]");
+
+				List<IssueEvent> result = gitHubRestService.getIssueEvents("owner", "repo", 789);
+
+				assertThat(result).isEmpty();
+			}
+
+		}
+
+		@Nested
+		@DisplayName("Collaborators API Tests")
+		class CollaboratorsAPITest {
+
+			@Test
+			@DisplayName("Should get repository collaborators with permissions")
+			void shouldGetRepositoryCollaboratorsWithPermissions() {
+				String mockResponse = """
+						[
+						    {
+						        "login": "maintainer1",
+						        "id": 12345,
+						        "type": "User",
+						        "permissions": {
+						            "admin": true,
+						            "maintain": true,
+						            "push": true,
+						            "triage": true,
+						            "pull": true
+						        },
+						        "role_name": "admin"
+						    },
+						    {
+						        "login": "contributor1",
+						        "id": 67890,
+						        "type": "User",
+						        "permissions": {
+						            "admin": false,
+						            "maintain": false,
+						            "push": true,
+						            "triage": true,
+						            "pull": true
+						        },
+						        "role_name": "write"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/collaborators?per_page=100")).thenReturn(mockResponse);
+
+				List<Collaborator> result = gitHubRestService.getRepositoryCollaborators("owner", "repo");
+
+				assertThat(result).hasSize(2);
+				assertThat(result.get(0).login()).isEqualTo("maintainer1");
+				assertThat(result.get(0).permissions()).isNotNull();
+				assertThat(result.get(0).permissions().admin()).isTrue();
+				assertThat(result.get(0).roleName()).isEqualTo("admin");
+				assertThat(result.get(1).login()).isEqualTo("contributor1");
+				assertThat(result.get(1).permissions().admin()).isFalse();
+				assertThat(result.get(1).permissions().push()).isTrue();
+				assertThat(result.get(1).roleName()).isEqualTo("write");
+			}
+
+			@Test
+			@DisplayName("Should handle collaborators error gracefully")
+			void shouldHandleCollaboratorsErrorGracefully() {
+				when(mockHttpClient.get(anyString())).thenThrow(new RuntimeException("API error"));
+
+				List<Collaborator> result = gitHubRestService.getRepositoryCollaborators("owner", "repo");
+
+				assertThat(result).isEmpty();
+			}
+
+			@Test
+			@DisplayName("Should handle empty collaborators list")
+			void shouldHandleEmptyCollaboratorsList() {
+				when(mockHttpClient.get("/repos/owner/repo/collaborators?per_page=100")).thenReturn("[]");
+
+				List<Collaborator> result = gitHubRestService.getRepositoryCollaborators("owner", "repo");
+
+				assertThat(result).isEmpty();
+			}
+
+			@Test
+			@DisplayName("Should handle collaborator without permissions field")
+			void shouldHandleCollaboratorWithoutPermissionsField() {
+				String mockResponse = """
+						[
+						    {
+						        "login": "user1",
+						        "id": 11111,
+						        "type": "User"
+						    }
+						]
+						""";
+				when(mockHttpClient.get("/repos/owner/repo/collaborators?per_page=100")).thenReturn(mockResponse);
+
+				List<Collaborator> result = gitHubRestService.getRepositoryCollaborators("owner", "repo");
+
+				assertThat(result).hasSize(1);
+				assertThat(result.get(0).login()).isEqualTo("user1");
+				assertThat(result.get(0).permissions()).isNull();
+				assertThat(result.get(0).roleName()).isNull();
+			}
+
+		}
+
 	}
 
 	@Nested
