@@ -187,6 +187,19 @@ public class GitHubCollectorBuilder {
 	}
 
 	/**
+	 * Build a CollaboratorsCollectionService.
+	 * @return configured CollaboratorsCollectionService
+	 */
+	@SuppressWarnings("unchecked")
+	public CollaboratorsCollectionService buildCollaboratorsCollector() {
+		validateToken();
+		Components components = buildComponents();
+		return new CollaboratorsCollectionService(components.graphQLService, components.restService,
+				components.objectMapper, properties, components.stateRepository, components.archiveService,
+				(BatchStrategy<Collaborator>) components.batchStrategy);
+	}
+
+	/**
 	 * Build the RestService directly (for advanced usage).
 	 * @return configured RestService
 	 */
