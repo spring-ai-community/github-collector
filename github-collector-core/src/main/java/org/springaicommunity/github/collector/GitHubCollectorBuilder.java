@@ -200,6 +200,19 @@ public class GitHubCollectorBuilder {
 	}
 
 	/**
+	 * Build a ReleasesCollectionService.
+	 * @return configured ReleasesCollectionService
+	 */
+	@SuppressWarnings("unchecked")
+	public ReleasesCollectionService buildReleasesCollector() {
+		validateToken();
+		Components components = buildComponents();
+		return new ReleasesCollectionService(components.graphQLService, components.restService, components.objectMapper,
+				properties, components.stateRepository, components.archiveService,
+				(BatchStrategy<Release>) components.batchStrategy);
+	}
+
+	/**
 	 * Build the RestService directly (for advanced usage).
 	 * @return configured RestService
 	 */

@@ -18,7 +18,8 @@ import org.springaicommunity.github.collector.*;
  * Examples: java -jar github-collector-cli.jar --repo spring-projects/spring-ai java -jar
  * github-collector-cli.jar --batch-size 50 --incremental java -jar
  * github-collector-cli.jar --dry-run --verbose java -jar github-collector-cli.jar --type
- * prs --pr-state merged java -jar github-collector-cli.jar --type collaborators
+ * prs --pr-state merged java -jar github-collector-cli.jar --type collaborators java -jar
+ * github-collector-cli.jar --type releases
  */
 public class GitHubCollectorCli {
 
@@ -65,6 +66,10 @@ public class GitHubCollectorCli {
 			case "collaborators":
 				CollaboratorsCollectionService collaboratorsCollector = builder.buildCollaboratorsCollector();
 				result = collaboratorsCollector.collectItems(createRequest(config));
+				break;
+			case "releases":
+				ReleasesCollectionService releasesCollector = builder.buildReleasesCollector();
+				result = releasesCollector.collectItems(createRequest(config));
 				break;
 			default:
 				IssueCollectionService issueCollector = builder.buildIssueCollector();
