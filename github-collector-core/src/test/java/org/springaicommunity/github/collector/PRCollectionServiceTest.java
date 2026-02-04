@@ -117,7 +117,7 @@ class PRCollectionServiceTest {
 		@DisplayName("Should handle dry run for multiple PRs without creating files")
 		void shouldHandleDryRunForMultiplePRsWithoutCreatingFiles() {
 			// Setup
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr is:open");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(150);
 
@@ -157,7 +157,7 @@ class PRCollectionServiceTest {
 		@CsvSource({ "open, 75", "closed, 150", "merged, 50", "all, 225" })
 		@DisplayName("Should handle different PR states in dry run")
 		void shouldHandleDifferentPRStatesInDryRun(String state, int expectedCount) {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(expectedCount);
 
@@ -172,13 +172,13 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle label filtering in dry run")
 		void shouldHandleLabelFilteringInDryRun() {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr label:\"bug\"");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(25);
 
 			CollectionRequest request = new CollectionRequest("owner/repo", 50, true, false, false, true, false,
-					"closed", List.of("bug", "enhancement"), "all", null, null, null, "prs", null, "open", false, false,
-					null);
+					"closed", List.of("bug", "enhancement"), "all", null, null, null, "prs", null, "open", false, null,
+					null, false, null);
 
 			CollectionResult result = prCollectionService.collectItems(request);
 
@@ -186,7 +186,7 @@ class PRCollectionServiceTest {
 
 			// Verify label filters were passed
 			verify(mockRestService).buildPRSearchQuery(eq("owner/repo"), eq("open"), eq(List.of("bug", "enhancement")),
-					eq("all"));
+					eq("all"), any(), any());
 		}
 
 	}
@@ -391,7 +391,7 @@ class PRCollectionServiceTest {
 
 			List<Review> emptyReviews = List.of();
 
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(2);
 			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(searchResult);
@@ -420,7 +420,7 @@ class PRCollectionServiceTest {
 		void shouldHandleEmptySearchResults() {
 			SearchResult<PullRequest> emptyResult = SearchResult.empty();
 
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(0);
 			when(mockRestService.searchPRs(anyString(), anyInt(), any())).thenReturn(emptyResult);
@@ -444,28 +444,29 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should delegate search query building to RestService")
 		void shouldDelegateSearchQueryBuildingToRestService() {
-			when(mockRestService.buildPRSearchQuery("owner/repo", "open", List.of(), "any"))
+			when(mockRestService.buildPRSearchQuery("owner/repo", "open", List.of(), "any", null, null))
 				.thenReturn("repo:owner/repo is:pr is:open");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(10);
 
 			CollectionRequest request = createPRRequest("owner/repo", 50, true, "open");
 			prCollectionService.collectItems(request);
 
-			verify(mockRestService).buildPRSearchQuery("owner/repo", "open", List.of(), "any");
+			verify(mockRestService).buildPRSearchQuery("owner/repo", "open", List.of(), "any", null, null);
 		}
 
 		@ParameterizedTest
 		@ValueSource(strings = { "open", "closed", "merged", "all" })
 		@DisplayName("Should pass correct PR state to query builder")
 		void shouldPassCorrectPRStateToQueryBuilder(String state) {
-			when(mockRestService.buildPRSearchQuery(anyString(), eq(state), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), eq(state), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(5);
 
 			CollectionRequest request = createPRRequest("owner/repo", 50, true, state);
 			prCollectionService.collectItems(request);
 
-			verify(mockRestService).buildPRSearchQuery(eq("owner/repo"), eq(state), anyList(), anyString());
+			verify(mockRestService).buildPRSearchQuery(eq("owner/repo"), eq(state), anyList(), anyString(), any(),
+					any());
 		}
 
 	}
@@ -477,7 +478,7 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle invalid repository format")
 		void shouldHandleInvalidRepositoryFormat() {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("invalid");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(0);
 
@@ -490,7 +491,7 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle REST service errors")
 		void shouldHandleRestServiceErrors() {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenThrow(new RuntimeException("API error"));
 
 			CollectionRequest request = createPRRequest("owner/repo", 50, true, "open");
@@ -502,7 +503,7 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should handle state repository errors during collection")
 		void shouldHandleStateRepositoryErrorsDuringCollection() {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(5);
 			when(mockStateRepository.createOutputDirectory(anyString(), anyString(), anyString()))
@@ -523,7 +524,7 @@ class PRCollectionServiceTest {
 		@DisplayName("Should return 'prs' as collection type")
 		void shouldReturnPrsAsCollectionType() {
 			// The collection type affects output directory and file naming
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(1);
 
@@ -531,7 +532,7 @@ class PRCollectionServiceTest {
 			prCollectionService.collectItems(request);
 
 			// Verify the search query was built (confirming PR-specific behavior)
-			verify(mockRestService).buildPRSearchQuery(anyString(), anyString(), anyList(), anyString());
+			verify(mockRestService).buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any());
 			verify(mockRestService).getTotalPRCount(anyString());
 		}
 
@@ -539,7 +540,7 @@ class PRCollectionServiceTest {
 		@DisplayName("Should return 'PRs' as item type name")
 		void shouldReturnPRsAsItemTypeName() {
 			// This is used in logging - verify through successful execution
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(0);
 
@@ -569,7 +570,7 @@ class PRCollectionServiceTest {
 
 			// Request with zip=true
 			CollectionRequest request = new CollectionRequest("owner/repo", 50, false, false, true, true, false,
-					"closed", List.of(), "any", null, null, null, "prs", 200, "all", false, false, null);
+					"closed", List.of(), "any", null, null, null, "prs", 200, "all", false, null, null, false, null);
 
 			prCollectionService.collectItems(request);
 
@@ -616,7 +617,7 @@ class PRCollectionServiceTest {
 		@Test
 		@DisplayName("Should use RestService instead of GraphQLService for PR operations")
 		void shouldUseRestServiceInsteadOfGraphQLServiceForPROperations() {
-			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString()))
+			when(mockRestService.buildPRSearchQuery(anyString(), anyString(), anyList(), anyString(), any(), any()))
 				.thenReturn("repo:owner/repo is:pr");
 			when(mockRestService.getTotalPRCount(anyString())).thenReturn(10);
 

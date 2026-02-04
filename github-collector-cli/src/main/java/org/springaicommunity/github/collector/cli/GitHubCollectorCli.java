@@ -57,23 +57,33 @@ public class GitHubCollectorCli {
 		GitHubCollectorBuilder builder = GitHubCollectorBuilder.create().tokenFromEnv().properties(properties);
 
 		// Execute collection based on type
+		CollectionRequest request = createRequest(config);
+		boolean useWindowing = config.createdAfter != null && config.createdBefore != null;
 		CollectionResult result;
 		switch (config.collectionType) {
 			case "prs":
-				PRCollectionService prCollector = builder.buildPRCollector();
-				result = prCollector.collectItems(createRequest(config));
+				if (useWindowing) {
+					logger.info("Adaptive time-window splitting enabled for PR collection");
+					result = builder.buildWindowedPRCollector(request).collectItems(request);
+				}
+				else {
+					result = builder.buildPRCollector().collectItems(request);
+				}
 				break;
 			case "collaborators":
-				CollaboratorsCollectionService collaboratorsCollector = builder.buildCollaboratorsCollector();
-				result = collaboratorsCollector.collectItems(createRequest(config));
+				result = builder.buildCollaboratorsCollector().collectItems(request);
 				break;
 			case "releases":
-				ReleasesCollectionService releasesCollector = builder.buildReleasesCollector();
-				result = releasesCollector.collectItems(createRequest(config));
+				result = builder.buildReleasesCollector().collectItems(request);
 				break;
 			default:
-				IssueCollectionService issueCollector = builder.buildIssueCollector();
-				result = issueCollector.collectItems(createRequest(config));
+				if (useWindowing) {
+					logger.info("Adaptive time-window splitting enabled for issue collection");
+					result = builder.buildWindowedIssueCollector(request).collectItems(request);
+				}
+				else {
+					result = builder.buildIssueCollector().collectItems(request);
+				}
 				break;
 		}
 
@@ -85,7 +95,7 @@ public class GitHubCollectorCli {
 		return new CollectionRequest(config.repository, config.batchSize, config.dryRun, config.incremental, config.zip,
 				config.clean, config.resume, config.issueState, config.labelFilters, config.labelMode, config.maxIssues,
 				config.sortBy, config.sortOrder, config.collectionType, config.prNumber, config.prState, config.verbose,
-				config.singleFile, config.outputFile);
+				config.createdAfter, config.createdBefore, config.singleFile, config.outputFile);
 	}
 
 	private static void logConfiguration(ParsedConfiguration config) {
@@ -107,6 +117,8 @@ public class GitHubCollectorCli {
 		logger.info("  Collection type: {}", config.collectionType);
 		logger.info("  PR number: {}", config.prNumber != null ? config.prNumber : "all");
 		logger.info("  PR state: {}", config.prState);
+		logger.info("  Created after: {}", config.createdAfter != null ? config.createdAfter : "(not set)");
+		logger.info("  Created before: {}", config.createdBefore != null ? config.createdBefore : "(not set)");
 		logger.info("  Single file: {}", config.singleFile);
 		logger.info("  Output file: {}", config.outputFile != null ? config.outputFile : "(default)");
 	}

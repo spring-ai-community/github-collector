@@ -28,10 +28,34 @@ public record CollectionRequest(
 		// Phase 3: Logging parameters
 		boolean verbose, // enable verbose logging
 
+		// Date filtering
+		@Nullable String createdAfter, // ISO date YYYY-MM-DD: only issues created on or
+										// after
+		@Nullable String createdBefore, // ISO date YYYY-MM-DD: only issues created before
+
 		// Output options
 		boolean singleFile, // output all results to a single JSON file
-		@Nullable String outputFile // custom output file path
+		@Nullable String outputFile, // custom output file path
+
+		// Windowed collection
+		@Nullable Integer batchOffset // starting batch number offset (null = start at 1)
 ) {
+
+	/**
+	 * Backward-compatible constructor for existing code (21-parameter version,
+	 * pre-batchOffset).
+	 */
+	public CollectionRequest(String repository, int batchSize, boolean dryRun, boolean incremental, boolean zip,
+			boolean clean, boolean resume, String issueState, List<String> labelFilters, String labelMode,
+			@Nullable Integer maxIssues, String sortBy, String sortOrder, String collectionType,
+			@Nullable Integer prNumber, String prState, boolean verbose, @Nullable String createdAfter,
+			@Nullable String createdBefore, boolean singleFile, @Nullable String outputFile) {
+		this(repository, batchSize, dryRun, incremental, zip, clean, resume, issueState, labelFilters, labelMode,
+				maxIssues, sortBy, sortOrder, collectionType, prNumber, prState, verbose, createdAfter, createdBefore,
+				singleFile, outputFile, null // batchOffset: start at 1 (backward
+												// compatible)
+		);
+	}
 
 	/**
 	 * Backward-compatible constructor for existing code (10-parameter version).
@@ -48,6 +72,8 @@ public record CollectionRequest(
 				null, // prNumber: null = all PRs
 				"open", // prState: default PR state
 				false, // verbose: default to false (backward compatible)
+				null, // createdAfter: no date filter
+				null, // createdBefore: no date filter
 				false, // singleFile: default to batch mode
 				null // outputFile: use default path
 		);
@@ -62,11 +88,12 @@ public record CollectionRequest(
 			@Nullable Integer maxIssues, String sortBy, String sortOrder, String collectionType,
 			@Nullable Integer prNumber, String prState, boolean verbose) {
 		this(repository, batchSize, dryRun, incremental, zip, clean, resume, issueState, labelFilters, labelMode,
-				maxIssues, sortBy, sortOrder, collectionType, prNumber, prState, verbose, false, // singleFile:
-																									// default
-																									// to
-																									// batch
-																									// mode
+				maxIssues, sortBy, sortOrder, collectionType, prNumber, prState, verbose, null, // createdAfter:
+																								// no
+																								// date
+																								// filter
+				null, // createdBefore: no date filter
+				false, // singleFile: default to batch mode
 				null // outputFile: use default path
 		);
 	}
@@ -90,6 +117,8 @@ public record CollectionRequest(
 				null, // prNumber: null = all
 				"open", // prState: default
 				false, // verbose: default to false
+				null, // createdAfter: no date filter
+				null, // createdBefore: no date filter
 				false, // singleFile: default to batch mode
 				null // outputFile: use default path
 		);
@@ -123,8 +152,11 @@ public record CollectionRequest(
 			.prNumber(prNumber)
 			.prState(prState)
 			.verbose(verbose)
+			.createdAfter(createdAfter)
+			.createdBefore(createdBefore)
 			.singleFile(singleFile)
-			.outputFile(outputFile);
+			.outputFile(outputFile)
+			.batchOffset(batchOffset);
 	}
 
 	/**
@@ -166,9 +198,15 @@ public record CollectionRequest(
 
 		private boolean verbose = false;
 
+		private String createdAfter = null;
+
+		private String createdBefore = null;
+
 		private boolean singleFile = false;
 
 		private String outputFile = null;
+
+		private Integer batchOffset = null;
 
 		public Builder repository(String repository) {
 			this.repository = repository;
@@ -255,6 +293,16 @@ public record CollectionRequest(
 			return this;
 		}
 
+		public Builder createdAfter(String createdAfter) {
+			this.createdAfter = createdAfter;
+			return this;
+		}
+
+		public Builder createdBefore(String createdBefore) {
+			this.createdBefore = createdBefore;
+			return this;
+		}
+
 		public Builder singleFile(boolean singleFile) {
 			this.singleFile = singleFile;
 			return this;
@@ -265,10 +313,15 @@ public record CollectionRequest(
 			return this;
 		}
 
+		public Builder batchOffset(Integer batchOffset) {
+			this.batchOffset = batchOffset;
+			return this;
+		}
+
 		public CollectionRequest build() {
 			return new CollectionRequest(repository, batchSize, dryRun, incremental, zip, clean, resume, issueState,
 					labelFilters, labelMode, maxIssues, sortBy, sortOrder, collectionType, prNumber, prState, verbose,
-					singleFile, outputFile);
+					createdAfter, createdBefore, singleFile, outputFile, batchOffset);
 		}
 
 	}
@@ -306,11 +359,7 @@ public record CollectionRequest(
 
 		return new CollectionRequest(repository, batchSize, dryRun, incremental, zip, clean, resume, issueState,
 				labelFilters, labelMode, validatedMaxIssues, validatedSortBy, validatedSortOrder,
-				validatedCollectionType, prNumber, validatedPrState, verbose, // preserve
-																				// verbose
-																				// setting
-				singleFile, // preserve singleFile setting
-				outputFile // preserve outputFile setting
-		);
+				validatedCollectionType, prNumber, validatedPrState, verbose, createdAfter, createdBefore, singleFile,
+				outputFile, batchOffset);
 	}
 }

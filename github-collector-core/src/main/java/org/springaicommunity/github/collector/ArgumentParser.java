@@ -177,6 +177,24 @@ public class ArgumentParser {
 					i++; // Skip next argument since we consumed it
 					break;
 
+				case "--created-after":
+					config.createdAfter = getRequiredValue(args, i, "created-after");
+					if (!config.createdAfter.matches("\\d{4}-\\d{2}-\\d{2}")) {
+						throw new IllegalArgumentException(
+								"Invalid date '" + config.createdAfter + "': must be YYYY-MM-DD format");
+					}
+					i++;
+					break;
+
+				case "--created-before":
+					config.createdBefore = getRequiredValue(args, i, "created-before");
+					if (!config.createdBefore.matches("\\d{4}-\\d{2}-\\d{2}")) {
+						throw new IllegalArgumentException(
+								"Invalid date '" + config.createdBefore + "': must be YYYY-MM-DD format");
+					}
+					i++;
+					break;
+
 				case "--single-file":
 					config.singleFile = true;
 					break;
@@ -259,6 +277,11 @@ public class ArgumentParser {
 				"    -t, --type <type>       Collection type: issues, prs, collaborators, releases (default: issues)\n");
 		help.append("    -n, --number <number>   Specific PR number to collect (when type=prs)\n");
 		help.append("    --pr-state <state>      PR state: open, closed, merged, all (default: open)\n");
+		help.append("\n");
+		help.append("DATE FILTERING OPTIONS:\n");
+		help.append("    --created-after DATE    Only collect issues created on or after DATE (YYYY-MM-DD)\n");
+		help.append("    --created-before DATE   Only collect issues created before DATE (YYYY-MM-DD)\n");
+		help.append("                           Filters via GitHub search API; also stops pagination early\n");
 		help.append("\n");
 		help.append("DASHBOARD OPTIONS (Phase 1 Enhancement):\n");
 		help.append("    --max-issues <count>    Limit total issues collected (default: unlimited)\n");

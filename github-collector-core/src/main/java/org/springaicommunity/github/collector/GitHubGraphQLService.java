@@ -223,11 +223,43 @@ public class GitHubGraphQLService implements GraphQLService {
 
 			String response = httpClient.postGraphQL(requestBody);
 
-			return objectMapper.readTree(response);
+			JsonNode root = objectMapper.readTree(response);
+
+			// Check for rate limit errors in GraphQL response body (HTTP 200 with errors)
+			checkForGraphQLRateLimitError(root);
+
+			return root;
+		}
+		catch (GitHubHttpClient.GitHubApiException e) {
+			// Re-throw API exceptions so retry logic can handle them
+			throw e;
 		}
 		catch (Exception e) {
 			logger.error("GraphQL query failed: {}", e.getMessage());
 			return objectMapper.createObjectNode();
+		}
+	}
+
+	/**
+	 * Check for rate limit errors in a GraphQL response body. GitHub GraphQL can return
+	 * HTTP 200 with an "errors" array containing rate limit information.
+	 */
+	private void checkForGraphQLRateLimitError(JsonNode root) {
+		JsonNode errors = root.path("errors");
+		if (!errors.isArray()) {
+			return;
+		}
+
+		for (JsonNode error : errors) {
+			String type = error.path("type").asText("");
+			String message = error.path("message").asText("");
+
+			if ("RATE_LIMITED".equals(type) || message.toLowerCase().contains("rate limit")) {
+				logger.warn("GraphQL rate limit error detected: {}", message);
+				// Throw as 429 so the retry layer can handle it
+				throw new GitHubHttpClient.GitHubApiException("GraphQL rate limit exceeded: " + message, 429,
+						root.toString());
+			}
 		}
 	}
 

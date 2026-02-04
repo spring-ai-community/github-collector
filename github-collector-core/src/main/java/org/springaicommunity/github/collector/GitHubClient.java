@@ -34,4 +34,13 @@ public interface GitHubClient {
 	 */
 	String postGraphQL(String body);
 
+	/**
+	 * Get the rate limit information from the most recent API response. Returns null if
+	 * no rate limit headers have been observed yet.
+	 * @return last observed RateLimitInfo, or null
+	 */
+	default RateLimitInfo getLastRateLimitInfo() {
+		return null;
+	}
+
 }

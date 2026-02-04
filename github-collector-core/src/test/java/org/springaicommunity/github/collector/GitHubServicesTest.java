@@ -245,7 +245,7 @@ class GitHubServicesTest {
 				assertThat(result).isNotNull();
 				assertThat(result.number()).isEqualTo(123);
 				assertThat(result.title()).isEqualTo("Fix bug");
-				assertThat(result.state()).isEqualTo("open");
+				assertThat(result.state()).isEqualTo("OPEN");
 			}
 
 			@Test
@@ -411,7 +411,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should build basic PR search query")
 			void shouldBuildBasicPRSearchQuery() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", null, "any");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", null, "any", null, null);
 
 				assertThat(query).contains("repo:owner/repo")
 					.contains("is:pr")
@@ -422,7 +422,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should build PR search query for closed state")
 			void shouldBuildPRSearchQueryForClosedState() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "any");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "any", null, null);
 
 				assertThat(query).contains("repo:owner/repo").contains("is:pr").contains("is:closed");
 			}
@@ -430,7 +430,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should build PR search query for merged state")
 			void shouldBuildPRSearchQueryForMergedState() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "merged", null, "any");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "merged", null, "any", null, null);
 
 				assertThat(query).contains("repo:owner/repo").contains("is:pr").contains("is:merged");
 			}
@@ -438,7 +438,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should build PR search query for all states")
 			void shouldBuildPRSearchQueryForAllStates() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "all", null, "any");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "all", null, "any", null, null);
 
 				assertThat(query).contains("repo:owner/repo")
 					.contains("is:pr")
@@ -452,7 +452,7 @@ class GitHubServicesTest {
 			@DisplayName("Should build PR search query with labels in all mode")
 			void shouldBuildPRSearchQueryWithLabelsInAllMode() {
 				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open",
-						List.of("bug", "priority:high"), "all");
+						List.of("bug", "priority:high"), "all", null, null);
 
 				assertThat(query).contains("repo:owner/repo")
 					.contains("is:pr")
@@ -464,7 +464,7 @@ class GitHubServicesTest {
 			@DisplayName("Should build PR search query with labels in any mode - uses first label")
 			void shouldBuildPRSearchQueryWithLabelsInAnyMode() {
 				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", List.of("bug", "enhancement"),
-						"any");
+						"any", null, null);
 
 				assertThat(query).contains("repo:owner/repo")
 					.contains("is:pr")
@@ -475,7 +475,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should handle empty labels list")
 			void shouldHandleEmptyLabelsList() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", List.of(), "any");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "open", List.of(), "any", null, null);
 
 				assertThat(query).contains("repo:owner/repo").contains("is:pr").doesNotContain("label:");
 			}
@@ -483,7 +483,7 @@ class GitHubServicesTest {
 			@Test
 			@DisplayName("Should handle null labels")
 			void shouldHandleNullLabels() {
-				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "all");
+				String query = gitHubRestService.buildPRSearchQuery("owner/repo", "closed", null, "all", null, null);
 
 				assertThat(query).contains("repo:owner/repo").contains("is:pr").doesNotContain("label:");
 			}
@@ -873,6 +873,68 @@ class GitHubServicesTest {
 			int result = gitHubGraphQLService.getTotalIssueCount(owner, repo, state);
 
 			assertThat(result).isEqualTo(expectedCount);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("GraphQL Rate Limit Error Detection Tests")
+	class GraphQLRateLimitTest {
+
+		private GitHubGraphQLService gitHubGraphQLService;
+
+		@BeforeEach
+		void setUp() {
+			gitHubGraphQLService = new GitHubGraphQLService(mockGraphQLHttpClient, realObjectMapper);
+		}
+
+		@Test
+		@DisplayName("Should throw on RATE_LIMITED type in GraphQL errors")
+		void shouldThrowOnRateLimitedType() {
+			String response = """
+					{"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}],"data":null}""";
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(response);
+
+			assertThatThrownBy(
+					() -> gitHubGraphQLService.getSearchIssueCount("repo:spring-projects/spring-ai is:issue"))
+				.isInstanceOf(GitHubHttpClient.GitHubApiException.class)
+				.hasMessageContaining("GraphQL rate limit exceeded");
+		}
+
+		@Test
+		@DisplayName("Should throw on rate limit message in GraphQL errors")
+		void shouldThrowOnRateLimitMessage() {
+			String response = """
+					{"errors":[{"type":"OTHER","message":"You have exceeded a secondary rate limit"}],"data":null}""";
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(response);
+
+			assertThatThrownBy(
+					() -> gitHubGraphQLService.getSearchIssueCount("repo:spring-projects/spring-ai is:issue"))
+				.isInstanceOf(GitHubHttpClient.GitHubApiException.class)
+				.hasMessageContaining("rate limit");
+		}
+
+		@Test
+		@DisplayName("Should NOT throw on non-rate-limit GraphQL errors")
+		void shouldNotThrowOnNonRateLimitErrors() {
+			// GraphQL errors that aren't rate-limit related should not throw
+			String response = """
+					{"errors":[{"type":"NOT_FOUND","message":"Could not resolve to a Repository"}],"data":null}""";
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(response);
+
+			// Should return 0 (default) instead of throwing
+			int count = gitHubGraphQLService.getSearchIssueCount("repo:nonexistent/repo is:issue");
+			assertThat(count).isEqualTo(0);
+		}
+
+		@Test
+		@DisplayName("Should handle response with both data and no errors")
+		void shouldHandleNormalResponse() {
+			String response = "{\"data\":{\"search\":{\"issueCount\":42}}}";
+			when(mockGraphQLHttpClient.postGraphQL(anyString())).thenReturn(response);
+
+			int count = gitHubGraphQLService.getSearchIssueCount("repo:spring-projects/spring-ai is:issue");
+			assertThat(count).isEqualTo(42);
 		}
 
 	}

@@ -167,4 +167,106 @@ class SimpleIntegrationIT {
 		}).doesNotThrowAnyException();
 	}
 
+	// --- Adaptive windowing integration tests ---
+
+	@Test
+	@DisplayName("Issue search count with date range returns valid count")
+	void issueSearchCountWithDateRangeTest() {
+		// Test that we can query issue count with a date range via the Search API
+		assertThatCode(() -> {
+			String query = GitHubCollectorBuilder.buildIssueSearchQuery("spring-projects/spring-ai", "closed",
+					List.of(), "any", "2024-01-01", "2024-06-01");
+			int count = graphQLService.getSearchIssueCount(query);
+			// Just verify the API call works and returns a non-negative count
+			assertThat(count).isGreaterThanOrEqualTo(0);
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("PR search count with date range returns valid count")
+	void prSearchCountWithDateRangeTest() {
+		// Test that we can query PR count with a date range via the Search API
+		assertThatCode(() -> {
+			String query = restService.buildPRSearchQuery("spring-projects/spring-ai", "closed", List.of(), "any",
+					"2024-01-01", "2024-06-01");
+			assertThat(query).contains("created:2024-01-01..2024-06-01");
+			int count = restService.getTotalPRCount(query);
+			assertThat(count).isGreaterThanOrEqualTo(0);
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("Windowed issue collector can be built via builder")
+	void windowedIssueCollectorBuildableTest() {
+		assertThatCode(() -> {
+			CollectionRequest request = CollectionRequest.builder()
+				.repository("spring-projects/spring-ai")
+				.batchSize(100)
+				.issueState("closed")
+				.collectionType("issues")
+				.createdAfter("2024-01-01")
+				.createdBefore("2024-06-01")
+				.build();
+
+			WindowedCollectionService<Issue> windowed = GitHubCollectorBuilder.create()
+				.tokenFromEnv()
+				.objectMapper(objectMapper)
+				.buildWindowedIssueCollector(request);
+			assertThat(windowed).isNotNull();
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("Windowed PR collector can be built via builder")
+	void windowedPRCollectorBuildableTest() {
+		assertThatCode(() -> {
+			CollectionRequest request = CollectionRequest.builder()
+				.repository("spring-projects/spring-ai")
+				.batchSize(100)
+				.prState("closed")
+				.collectionType("prs")
+				.createdAfter("2024-01-01")
+				.createdBefore("2024-06-01")
+				.build();
+
+			WindowedCollectionService<AnalyzedPullRequest> windowed = GitHubCollectorBuilder.create()
+				.tokenFromEnv()
+				.objectMapper(objectMapper)
+				.buildWindowedPRCollector(request);
+			assertThat(windowed).isNotNull();
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("PR state is normalized to uppercase")
+	void prStateNormalizationTest() {
+		// Fetch a real PR and verify state is uppercase
+		assertThatCode(() -> {
+			PullRequest pr = restService.getPullRequest("spring-projects", "spring-ai", 1);
+			assertThat(pr).isNotNull();
+			// State should be uppercase (OPEN, CLOSED, or MERGED)
+			assertThat(pr.state()).matches("[A-Z]+");
+		}).doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("AdaptiveWindowPlanner works with real search counts")
+	void adaptiveWindowPlannerWithRealCountsTest() {
+		// Use a narrow date range that should fit in a single window
+		assertThatCode(() -> {
+			AdaptiveWindowPlanner planner = new AdaptiveWindowPlanner(900);
+			List<AdaptiveWindowPlanner.TimeWindow> windows = planner.planWindows("2024-01-01", "2024-02-01",
+					(after, before) -> {
+						String query = GitHubCollectorBuilder.buildIssueSearchQuery("spring-projects/spring-ai",
+								"closed", List.of(), "any", after, before);
+						return graphQLService.getSearchIssueCount(query);
+					});
+
+			// A single month of spring-ai closed issues should fit in one window
+			assertThat(windows).isNotEmpty();
+			assertThat(windows.get(0).createdAfter()).isEqualTo("2024-01-01");
+			assertThat(windows.get(windows.size() - 1).createdBefore()).isEqualTo("2024-02-01");
+		}).doesNotThrowAnyException();
+	}
+
 }

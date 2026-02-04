@@ -50,6 +50,11 @@ public class ParsedConfiguration {
 
 	public String prState; // open/closed/all for PR filtering
 
+	// Date filtering (ISO date format: YYYY-MM-DD)
+	public String createdAfter = null; // issues created on or after this date
+
+	public String createdBefore = null; // issues created before this date
+
 	// Output options (single-file mode)
 	public boolean singleFile = false; // output all results to a single JSON file
 
@@ -81,8 +86,9 @@ public class ParsedConfiguration {
 				+ ", resume=" + resume + ", helpRequested=" + helpRequested + ", issueState='" + issueState + '\''
 				+ ", labelFilters=" + labelFilters + ", labelMode='" + labelMode + '\'' + ", maxIssues=" + maxIssues
 				+ ", sortBy='" + sortBy + '\'' + ", sortOrder='" + sortOrder + '\'' + ", collectionType='"
-				+ collectionType + '\'' + ", prNumber=" + prNumber + ", prState='" + prState + '\'' + ", singleFile="
-				+ singleFile + ", outputFile='" + outputFile + '\'' + '}';
+				+ collectionType + '\'' + ", prNumber=" + prNumber + ", prState='" + prState + '\'' + ", createdAfter='"
+				+ createdAfter + '\'' + ", createdBefore='" + createdBefore + '\'' + ", singleFile=" + singleFile
+				+ ", outputFile='" + outputFile + '\'' + '}';
 	}
 
 }

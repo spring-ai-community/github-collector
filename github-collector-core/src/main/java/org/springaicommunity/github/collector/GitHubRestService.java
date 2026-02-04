@@ -205,7 +205,8 @@ public class GitHubRestService implements RestService {
 	}
 
 	@Override
-	public String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode) {
+	public String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode,
+			@Nullable String createdAfter, @Nullable String createdBefore) {
 		StringBuilder query = new StringBuilder();
 		query.append("repo:").append(repository);
 		query.append(" is:pr");
@@ -232,6 +233,17 @@ public class GitHubRestService implements RestService {
 					query.append(" label:\"").append(label).append("\"");
 				}
 			}
+		}
+
+		// Date range filtering via GitHub search qualifiers
+		if (createdAfter != null && createdBefore != null) {
+			query.append(" created:").append(createdAfter).append("..").append(createdBefore);
+		}
+		else if (createdAfter != null) {
+			query.append(" created:>=").append(createdAfter);
+		}
+		else if (createdBefore != null) {
+			query.append(" created:<").append(createdBefore);
 		}
 
 		return query.toString();
@@ -289,7 +301,7 @@ public class GitHubRestService implements RestService {
 
 		try {
 			return new PullRequest(node.path("number").asInt(), node.path("title").asText(""),
-					node.path("body").asText(null), node.path("state").asText(""),
+					node.path("body").asText(null), node.path("state").asText("").toUpperCase(),
 					parseDateTime(node.path("created_at").asText(null)),
 					parseDateTime(node.path("updated_at").asText(null)),
 					parseDateTime(node.path("closed_at").asText(null)),
@@ -321,7 +333,7 @@ public class GitHubRestService implements RestService {
 
 		try {
 			return new PullRequest(node.path("number").asInt(), node.path("title").asText(""),
-					node.path("body").asText(null), node.path("state").asText(""),
+					node.path("body").asText(null), node.path("state").asText("").toUpperCase(),
 					parseDateTime(node.path("created_at").asText(null)),
 					parseDateTime(node.path("updated_at").asText(null)),
 					parseDateTime(node.path("closed_at").asText(null)), null, // merged_at

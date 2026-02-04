@@ -3,6 +3,9 @@ package org.springaicommunity.github.collector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
+import java.util.function.BiFunction;
+
 /**
  * Builder for creating GitHub collector services without Spring dependencies.
  *
@@ -230,6 +233,105 @@ public class GitHubCollectorBuilder {
 		return buildComponents().graphQLService;
 	}
 
+	/**
+	 * Build a WindowedCollectionService wrapping an IssueCollectionService.
+	 *
+	 * <p>
+	 * The returned service automatically splits collection into time windows when the
+	 * request specifies a date range that would exceed the GitHub Search API's 1,000
+	 * result limit.
+	 * @param request the collection request (used to build the count query)
+	 * @return WindowedCollectionService wrapping the issue collector
+	 */
+	@SuppressWarnings("unchecked")
+	public WindowedCollectionService<Issue> buildWindowedIssueCollector(CollectionRequest request) {
+		validateToken();
+		Components components = buildComponents();
+		IssueCollectionService issueCollector = new IssueCollectionService(components.graphQLService,
+				components.restService, components.objectMapper, properties, components.stateRepository,
+				components.archiveService, (BatchStrategy<Issue>) components.batchStrategy);
+
+		AdaptiveWindowPlanner planner = new AdaptiveWindowPlanner();
+
+		BiFunction<String, String, Integer> countFn = (after, before) -> {
+			String query = buildIssueSearchQuery(request.repository(), request.issueState(), request.labelFilters(),
+					request.labelMode(), after, before);
+			return components.graphQLService.getSearchIssueCount(query);
+		};
+
+		return new WindowedCollectionService<>(issueCollector, planner, countFn);
+	}
+
+	/**
+	 * Build a WindowedCollectionService wrapping a PRCollectionService.
+	 *
+	 * <p>
+	 * The returned service automatically splits collection into time windows when the
+	 * request specifies a date range that would exceed the GitHub Search API's 1,000
+	 * result limit.
+	 * @param request the collection request (used to build the count query)
+	 * @return WindowedCollectionService wrapping the PR collector
+	 */
+	@SuppressWarnings("unchecked")
+	public WindowedCollectionService<AnalyzedPullRequest> buildWindowedPRCollector(CollectionRequest request) {
+		validateToken();
+		Components components = buildComponents();
+		PRCollectionService prCollector = new PRCollectionService(components.graphQLService, components.restService,
+				components.objectMapper, properties, components.stateRepository, components.archiveService,
+				(BatchStrategy<AnalyzedPullRequest>) components.batchStrategy);
+
+		AdaptiveWindowPlanner planner = new AdaptiveWindowPlanner();
+
+		BiFunction<String, String, Integer> countFn = (after, before) -> {
+			String query = components.restService.buildPRSearchQuery(request.repository(), request.prState(),
+					request.labelFilters(), request.labelMode(), after, before);
+			return components.restService.getTotalPRCount(query);
+		};
+
+		return new WindowedCollectionService<>(prCollector, planner, countFn);
+	}
+
+	/**
+	 * Build an issue search query string with date range. This mirrors the query format
+	 * used internally by IssueCollectionService.
+	 */
+	public static String buildIssueSearchQuery(String repository, String state, List<String> labels, String labelMode,
+			@Nullable String createdAfter, @Nullable String createdBefore) {
+		StringBuilder query = new StringBuilder();
+		query.append("repo:").append(repository).append(" is:issue");
+
+		if (state != null) {
+			switch (state.toLowerCase()) {
+				case "open":
+					query.append(" is:open");
+					break;
+				case "closed":
+					query.append(" is:closed");
+					break;
+				case "all":
+					break;
+			}
+		}
+
+		if (labels != null && !labels.isEmpty()) {
+			for (String label : labels) {
+				query.append(" label:\"").append(label.trim()).append("\"");
+			}
+		}
+
+		if (createdAfter != null && createdBefore != null) {
+			query.append(" created:").append(createdAfter).append("..").append(createdBefore);
+		}
+		else if (createdAfter != null) {
+			query.append(" created:>=").append(createdAfter);
+		}
+		else if (createdBefore != null) {
+			query.append(" created:<").append(createdBefore);
+		}
+
+		return query.toString();
+	}
+
 	private void validateToken() {
 		// Skip token validation if a custom httpClient is provided
 		if (httpClient != null) {
@@ -242,7 +344,18 @@ public class GitHubCollectorBuilder {
 
 	private Components buildComponents() {
 		ObjectMapper mapper = this.objectMapper != null ? this.objectMapper : createDefaultObjectMapper();
-		GitHubClient client = this.httpClient != null ? this.httpClient : new GitHubHttpClient(token);
+		GitHubClient rawClient = this.httpClient != null ? this.httpClient : new GitHubHttpClient(token);
+
+		// Wrap with retry + rate limit handling unless a custom client was provided
+		GitHubClient client;
+		if (this.httpClient != null) {
+			// User provided a custom client — respect it as-is (may already have retry)
+			client = rawClient;
+		}
+		else {
+			client = RetryingGitHubClient.builder().wrapping(rawClient).maxRetries(3).build();
+		}
+
 		CollectionStateRepository repository = this.stateRepository != null ? this.stateRepository
 				: new FileSystemStateRepository(mapper);
 		ArchiveService archive = this.archiveService != null ? this.archiveService : new ZipArchiveService();

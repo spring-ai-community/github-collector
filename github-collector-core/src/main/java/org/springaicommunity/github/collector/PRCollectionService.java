@@ -152,7 +152,7 @@ public class PRCollectionService extends BaseCollectionService<AnalyzedPullReque
 	@Override
 	protected String buildSearchQuery(String owner, String repo, CollectionRequest request) {
 		return restService.buildPRSearchQuery(request.repository(), request.prState(), request.labelFilters(),
-				request.labelMode());
+				request.labelMode(), request.createdAfter(), request.createdBefore());
 	}
 
 	@Override

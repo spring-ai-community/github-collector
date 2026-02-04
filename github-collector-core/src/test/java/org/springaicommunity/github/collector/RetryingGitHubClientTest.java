@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -378,6 +379,221 @@ class RetryingGitHubClientTest {
 
 			assertThat(result).isEqualTo("success");
 			verify(mockDelegate, times(1)).postGraphQL("query");
+		}
+
+	}
+
+	@Nested
+	@DisplayName("Rate Limit Retry Tests")
+	class RateLimitRetryTest {
+
+		@Test
+		@DisplayName("Should retry on 403 rate limit (remaining=0)")
+		void shouldRetryOn403RateLimit() {
+			long resetEpoch = Instant.now().getEpochSecond() + 2; // 2 seconds from now
+			GitHubHttpClient.GitHubApiException rateLimitError = new GitHubHttpClient.GitHubApiException(
+					"Rate limit exceeded", 403, "rate limit", 0, resetEpoch);
+
+			when(mockDelegate.get("/path")).thenThrow(rateLimitError).thenReturn("success");
+
+			String result = retryingClient.get("/path");
+
+			assertThat(result).isEqualTo("success");
+			verify(mockDelegate, times(2)).get("/path");
+		}
+
+		@Test
+		@DisplayName("Should NOT retry on 403 non-rate-limit (remaining > 0)")
+		void shouldNotRetryOn403NonRateLimit() {
+			// A 403 with remaining > 0 is a permission error, not rate limit
+			GitHubHttpClient.GitHubApiException forbidden = new GitHubHttpClient.GitHubApiException("Forbidden", 403,
+					"Not allowed", 4999, Instant.now().getEpochSecond() + 3600);
+
+			when(mockDelegate.get("/path")).thenThrow(forbidden);
+
+			assertThatThrownBy(() -> retryingClient.get("/path"))
+				.isInstanceOf(GitHubHttpClient.GitHubApiException.class)
+				.hasMessageContaining("Forbidden");
+
+			verify(mockDelegate, times(1)).get("/path");
+		}
+
+		@Test
+		@DisplayName("Should retry 429 with reset-aware wait time")
+		void shouldRetry429WithResetAwareWait() {
+			long resetEpoch = Instant.now().getEpochSecond() + 3; // 3 seconds from now
+			GitHubHttpClient.GitHubApiException error = new GitHubHttpClient.GitHubApiException(
+					"Too Many Requests (429)", 429, "rate limit", 0, resetEpoch);
+
+			when(mockDelegate.get("/path")).thenThrow(error).thenReturn("success");
+
+			long start = System.currentTimeMillis();
+			String result = retryingClient.get("/path");
+			long elapsed = System.currentTimeMillis() - start;
+
+			assertThat(result).isEqualTo("success");
+			// Should have waited ~3-4 seconds (3s + 1s buffer) instead of 1ms default
+			assertThat(elapsed).isGreaterThan(2000);
+		}
+
+		@Test
+		@DisplayName("Should use default backoff when reset time is in the past")
+		void shouldUseDefaultBackoffWhenResetInPast() {
+			long resetEpoch = Instant.now().getEpochSecond() - 10; // 10 seconds ago
+			GitHubHttpClient.GitHubApiException error = new GitHubHttpClient.GitHubApiException("Rate limited", 429,
+					"rate limit", 0, resetEpoch);
+
+			when(mockDelegate.get("/path")).thenThrow(error).thenReturn("success");
+
+			long start = System.currentTimeMillis();
+			String result = retryingClient.get("/path");
+			long elapsed = System.currentTimeMillis() - start;
+
+			assertThat(result).isEqualTo("success");
+			// Should have used the default 1ms delay (from test setup), not a large wait
+			assertThat(elapsed).isLessThan(1000);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("Proactive Pacing Tests")
+	class ProactivePacingTest {
+
+		@Test
+		@DisplayName("Should pace when remaining is below threshold")
+		void shouldPaceWhenRemainingBelowThreshold() {
+			long resetEpoch = Instant.now().getEpochSecond() + 60;
+			RateLimitInfo lowInfo = new RateLimitInfo(5000, 50, resetEpoch, 4950);
+			when(mockDelegate.getLastRateLimitInfo()).thenReturn(lowInfo);
+			when(mockDelegate.get("/path")).thenReturn("success");
+
+			RetryingGitHubClient pacingClient = RetryingGitHubClient.builder()
+				.wrapping(mockDelegate)
+				.maxRetries(0)
+				.initialDelayMs(1)
+				.pacingThreshold(100)
+				.build();
+
+			long start = System.currentTimeMillis();
+			pacingClient.get("/path");
+			long elapsed = System.currentTimeMillis() - start;
+
+			// With 50 remaining and 60s until reset: pace = 60000/50 = 1200ms
+			assertThat(elapsed).isGreaterThanOrEqualTo(100);
+		}
+
+		@Test
+		@DisplayName("Should NOT pace when remaining is above threshold")
+		void shouldNotPaceWhenRemainingAboveThreshold() {
+			long resetEpoch = Instant.now().getEpochSecond() + 3600;
+			RateLimitInfo healthyInfo = new RateLimitInfo(5000, 4500, resetEpoch, 500);
+			when(mockDelegate.getLastRateLimitInfo()).thenReturn(healthyInfo);
+			when(mockDelegate.get("/path")).thenReturn("success");
+
+			RetryingGitHubClient pacingClient = RetryingGitHubClient.builder()
+				.wrapping(mockDelegate)
+				.maxRetries(0)
+				.initialDelayMs(1)
+				.pacingThreshold(100)
+				.build();
+
+			long start = System.currentTimeMillis();
+			pacingClient.get("/path");
+			long elapsed = System.currentTimeMillis() - start;
+
+			// Should not pace at all — remaining is well above threshold
+			assertThat(elapsed).isLessThan(500);
+		}
+
+		@Test
+		@DisplayName("Should NOT pace when rate limit info is null")
+		void shouldNotPaceWhenInfoIsNull() {
+			when(mockDelegate.getLastRateLimitInfo()).thenReturn(null);
+			when(mockDelegate.get("/path")).thenReturn("success");
+
+			long start = System.currentTimeMillis();
+			retryingClient.get("/path");
+			long elapsed = System.currentTimeMillis() - start;
+
+			assertThat(elapsed).isLessThan(500);
+		}
+
+		@Test
+		@DisplayName("Should delegate getLastRateLimitInfo to wrapped client")
+		void shouldDelegateGetLastRateLimitInfo() {
+			RateLimitInfo info = new RateLimitInfo(5000, 4000, 1234567890L, 1000);
+			when(mockDelegate.getLastRateLimitInfo()).thenReturn(info);
+
+			RateLimitInfo result = retryingClient.getLastRateLimitInfo();
+
+			assertThat(result).isEqualTo(info);
+			verify(mockDelegate).getLastRateLimitInfo();
+		}
+
+	}
+
+	@Nested
+	@DisplayName("GitHubApiException Rate Limit Fields Tests")
+	class ApiExceptionRateLimitFieldsTest {
+
+		@Test
+		@DisplayName("isRateLimitError returns true for 429")
+		void isRateLimitErrorFor429() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Rate limited", 429, "body",
+					0, 12345L);
+			assertThat(e.isRateLimitError()).isTrue();
+		}
+
+		@Test
+		@DisplayName("isRateLimitError returns true for 403 with remaining=0")
+		void isRateLimitErrorFor403WithZeroRemaining() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Rate limited", 403, "body",
+					0, 12345L);
+			assertThat(e.isRateLimitError()).isTrue();
+		}
+
+		@Test
+		@DisplayName("isRateLimitError returns false for 403 without rate limit info")
+		void isRateLimitErrorFalseFor403WithoutInfo() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Forbidden", 403, "body");
+			assertThat(e.isRateLimitError()).isFalse();
+		}
+
+		@Test
+		@DisplayName("isRateLimitError returns false for 404")
+		void isRateLimitErrorFalseFor404() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Not Found", 404, "body",
+					4999, 12345L);
+			assertThat(e.isRateLimitError()).isFalse();
+		}
+
+		@Test
+		@DisplayName("Rate limit fields are accessible")
+		void rateLimitFieldsAccessible() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Rate limited", 429, "body",
+					42, 1234567890L);
+			assertThat(e.getRateLimitRemaining()).isEqualTo(42);
+			assertThat(e.getResetEpochSeconds()).isEqualTo(1234567890L);
+		}
+
+		@Test
+		@DisplayName("Default constructor uses -1 for rate limit fields")
+		void defaultConstructorDefaults() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Error", 500, "body");
+			assertThat(e.getRateLimitRemaining()).isEqualTo(-1);
+			assertThat(e.getResetEpochSeconds()).isEqualTo(-1);
+			assertThat(e.isRateLimitError()).isFalse();
+		}
+
+		@Test
+		@DisplayName("Cause constructor uses -1 for rate limit fields")
+		void causeConstructorDefaults() {
+			GitHubHttpClient.GitHubApiException e = new GitHubHttpClient.GitHubApiException("Error",
+					new RuntimeException("cause"));
+			assertThat(e.getRateLimitRemaining()).isEqualTo(-1);
+			assertThat(e.getResetEpochSeconds()).isEqualTo(-1);
+			assertThat(e.isRateLimitError()).isFalse();
 		}
 
 	}

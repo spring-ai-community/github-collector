@@ -107,7 +107,7 @@ public abstract class BaseCollectionService<T> {
 
 		List<String> batchFiles = new ArrayList<>();
 		String cursor = null;
-		int batchNum = 1;
+		int batchNum = request.batchOffset() != null ? request.batchOffset() + 1 : 1;
 		boolean hasMoreFromAPI = true;
 		AtomicInteger processedCount = new AtomicInteger(0);
 
@@ -222,10 +222,12 @@ public abstract class BaseCollectionService<T> {
 			labelMode = properties.getDefaultLabelMode();
 		}
 
-		return new CollectionRequest(repository, batchSize, request.dryRun(), request.incremental(), request.zip(),
-				request.clean(), request.resume(), state, request.labelFilters(), labelMode, request.maxIssues(),
-				request.sortBy(), request.sortOrder(), request.collectionType(), request.prNumber(), request.prState(),
-				request.verbose(), request.singleFile(), request.outputFile());
+		return request.toBuilder()
+			.repository(repository)
+			.batchSize(batchSize)
+			.issueState(state)
+			.labelMode(labelMode)
+			.build();
 	}
 
 	/**

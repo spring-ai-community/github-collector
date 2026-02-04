@@ -87,7 +87,8 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 
 	@Override
 	protected String buildSearchQuery(String owner, String repo, CollectionRequest request) {
-		return buildSearchQuery(owner, repo, request.issueState(), request.labelFilters(), request.labelMode());
+		return buildSearchQuery(owner, repo, request.issueState(), request.labelFilters(), request.labelMode(),
+				request.createdAfter(), request.createdBefore());
 	}
 
 	@Override
@@ -172,8 +173,9 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 		return "issues";
 	}
 
-	// Build GitHub search query with state and label filtering
-	private String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode) {
+	// Build GitHub search query with state, label, and date filtering
+	private String buildSearchQuery(String owner, String repo, String state, List<String> labels, String labelMode,
+			String createdAfter, String createdBefore) {
 		StringBuilder query = new StringBuilder();
 
 		query.append("repo:").append(owner).append("/").append(repo).append(" is:issue");
@@ -208,6 +210,17 @@ public class IssueCollectionService extends BaseCollectionService<Issue> {
 					query.append(" label:\"").append(labels.get(0).trim()).append("\"");
 				}
 			}
+		}
+
+		// Date range filtering via GitHub search qualifiers
+		if (createdAfter != null && createdBefore != null) {
+			query.append(" created:").append(createdAfter).append("..").append(createdBefore);
+		}
+		else if (createdAfter != null) {
+			query.append(" created:>=").append(createdAfter);
+		}
+		else if (createdBefore != null) {
+			query.append(" created:<").append(createdBefore);
 		}
 
 		return query.toString();

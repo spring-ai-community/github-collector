@@ -126,9 +126,12 @@ public interface RestService {
 	 * @param prState PR state (open, closed, merged, all)
 	 * @param labelFilters Optional label filters
 	 * @param labelMode Label matching mode (any, all)
+	 * @param createdAfter Only PRs created on or after this date (YYYY-MM-DD), or null
+	 * @param createdBefore Only PRs created before this date (YYYY-MM-DD), or null
 	 * @return Formatted search query
 	 */
-	String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode);
+	String buildPRSearchQuery(String repository, String prState, List<String> labelFilters, String labelMode,
+			@Nullable String createdAfter, @Nullable String createdBefore);
 
 	/**
 	 * Search for pull requests using GitHub Search API.
