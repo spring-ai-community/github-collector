@@ -60,6 +60,15 @@ public class ParsedConfiguration {
 
 	public String outputFile = null; // custom output file path
 
+	// Verification options
+	public boolean verify = false; // run batch verification after collection or
+									// standalone
+
+	public boolean deduplicate = false; // run deduplication after verification (implies
+										// verify)
+
+	public String verifyDir = null; // custom directory for standalone verification
+
 	public ParsedConfiguration(CollectionProperties defaultProperties) {
 		// Initialize with defaults
 		this.repository = defaultProperties.getDefaultRepository();
@@ -88,7 +97,8 @@ public class ParsedConfiguration {
 				+ ", sortBy='" + sortBy + '\'' + ", sortOrder='" + sortOrder + '\'' + ", collectionType='"
 				+ collectionType + '\'' + ", prNumber=" + prNumber + ", prState='" + prState + '\'' + ", createdAfter='"
 				+ createdAfter + '\'' + ", createdBefore='" + createdBefore + '\'' + ", singleFile=" + singleFile
-				+ ", outputFile='" + outputFile + '\'' + '}';
+				+ ", outputFile='" + outputFile + '\'' + ", verify=" + verify + ", deduplicate=" + deduplicate
+				+ ", verifyDir='" + verifyDir + '\'' + '}';
 	}
 
 }

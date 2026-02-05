@@ -507,4 +507,44 @@ class ArgumentParserTest {
 
 	}
 
+	@Nested
+	@DisplayName("Verification Flag Tests")
+	class VerificationFlagTest {
+
+		@Test
+		@DisplayName("Should parse --verify flag")
+		void shouldParseVerifyFlag() {
+			String[] args = { "--verify" };
+
+			ParsedConfiguration config = argumentParser.parseAndValidate(args);
+
+			assertThat(config.verify).isTrue();
+			assertThat(config.deduplicate).isFalse();
+		}
+
+		@Test
+		@DisplayName("Should parse --deduplicate flag and imply verify")
+		void shouldParseDeduplicateAndImplyVerify() {
+			String[] args = { "--deduplicate" };
+
+			ParsedConfiguration config = argumentParser.parseAndValidate(args);
+
+			assertThat(config.deduplicate).isTrue();
+			assertThat(config.verify).isTrue();
+		}
+
+		@Test
+		@DisplayName("Should combine verify with other flags")
+		void shouldCombineVerifyWithOtherFlags() {
+			String[] args = { "--type", "prs", "--pr-state", "merged", "--repo", "owner/repo", "--verify" };
+
+			ParsedConfiguration config = argumentParser.parseAndValidate(args);
+
+			assertThat(config.verify).isTrue();
+			assertThat(config.collectionType).isEqualTo("prs");
+			assertThat(config.prState).isEqualTo("merged");
+		}
+
+	}
+
 }

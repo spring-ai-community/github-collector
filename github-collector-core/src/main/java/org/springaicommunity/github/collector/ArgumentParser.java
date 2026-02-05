@@ -204,6 +204,20 @@ public class ArgumentParser {
 					i++; // Skip next argument since we consumed it
 					break;
 
+				case "--verify":
+					config.verify = true;
+					break;
+
+				case "--deduplicate":
+					config.deduplicate = true;
+					config.verify = true; // deduplicate implies verify
+					break;
+
+				case "--verify-dir":
+					config.verifyDir = getRequiredValue(args, i, "verify-dir");
+					i++;
+					break;
+
 				case "-h", "--help":
 					config.helpRequested = true;
 					break;
@@ -341,6 +355,17 @@ public class ArgumentParser {
 		help.append("    ./collect_github_issues.java --type prs --pr-state open --single-file -o all_prs.json\n");
 		help.append(
 				"    ./collect_github_issues.java --type prs --single-file --incremental --no-clean -o all_prs.json\n");
+		help.append("\n");
+		help.append("VERIFICATION OPTIONS:\n");
+		help.append("    --verify                Verify batch files for duplicates, date-range violations,\n");
+		help.append("                           state mismatches, and batch integrity issues\n");
+		help.append("    --deduplicate           Remove duplicates from batch files (implies --verify)\n");
+		help.append("    --verify-dir <dir>      Directory containing batch files (for standalone verification)\n");
+		help.append("\n");
+		help.append("    # Standalone verification (no collection, no GITHUB_TOKEN needed)\n");
+		help.append(
+				"    ./collect_github_issues.java --type issues --verify --verify-dir data/expanded/project/issues\n");
+		help.append("    ./collect_github_issues.java --type prs --deduplicate --verify-dir data/raw/prs\n");
 		help.append("\n");
 
 		return help.toString();
